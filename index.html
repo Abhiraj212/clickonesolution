@@ -1,723 +1,1953 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Click One Solution</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <style>
-        * { font-family: 'Segoe UI', sans-serif; }
-        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .gold-btn { background: linear-gradient(135deg, #f5af19 0%, #f12711 100%); }
-        .hide { display: none !important; }
-        .glass { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); }
-        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e5e7eb; padding: 10px; z-index: 50; }
-        .emergency-btn { position: fixed; bottom: 100px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: #ef4444; color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(239,68,68,0.4); z-index: 40; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-        #map { height: 300px; width: 100%; border-radius: 12px; background: #e5e7eb; display: flex; align-items: center; justify-content: center; }
-    </style>
-</head>
-<body class="bg-gray-100 min-h-screen">
 
-<!-- CONFIGURATION -->
-<script>
-const firebaseConfig = {
-    apiKey: "AIzaSyDLU-IgBB-DrqTFd3ICOcIscVWdkC7ReeE",
-    authDomain: "click-one-solution-7af44.firebaseapp.com",
-    projectId: "click-one-solution-7af44",
-    storageBucket: "click-one-solution-7af44.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abcdef"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-
-// YOUR SETTINGS
-const ADMIN_UPI = "notabhiraj@fam";
-const ADMIN_QR = "https://i.ibb.co/b5wKDvrV/qr-code.jpg";
-const ADMIN_EMAIL = "skatoch829@gmail.com";
-const MAPMYINDIA_KEY = "72b5d2f6f173dc0b2339856e08433b16";
-
-let currentUser = null;
-let userRole = null;
-</script>
-
-<!-- AUTH SCREEN -->
-<div id="authScreen" class="min-h-screen gradient-bg flex items-center justify-center p-4">
-    <div class="glass rounded-2xl p-8 w-full max-w-md shadow-2xl">
-        <div class="text-center mb-6">
-            <div class="w-20 h-20 bg-white rounded-full mx-auto mb-4 flex items-center justify-center text-4xl">👆</div>
-            <h1 class="text-2xl font-bold text-gray-800">Click One Solution</h1>
-            <p class="text-gray-600">Hyperlocal Services</p>
-        </div>
-        
-        <div class="flex gap-2 mb-6">
-            <button onclick="selectRole('customer')" class="role-btn flex-1 py-2 rounded-lg border-2 border-purple-500 bg-purple-50 font-medium" data-role="customer">Customer</button>
-            <button onclick="selectRole('provider')" class="role-btn flex-1 py-2 rounded-lg border-2 border-gray-200 font-medium" data-role="provider">Provider</button>
-            <button onclick="selectRole('admin')" class="role-btn flex-1 py-2 rounded-lg border-2 border-gray-200 font-medium" data-role="admin">Admin</button>
-        </div>
-        
-        <div id="adminNotice" class="hide mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-            <i class="fas fa-shield-alt mr-2"></i>Admin login only. No registration.
-        </div>
-        
-        <form onsubmit="handleAuth(event)">
-            <input type="email" id="email" placeholder="Email" class="w-full px-4 py-3 rounded-lg border mb-3" required>
-            <input type="password" id="password" placeholder="Password" class="w-full px-4 py-3 rounded-lg border mb-3" required>
-            <input type="text" id="fullName" placeholder="Full Name" class="w-full px-4 py-3 rounded-lg border mb-3 hide">
-            <input type="tel" id="phone" placeholder="Phone" class="w-full px-4 py-3 rounded-lg border mb-3 hide">
-            
-            <button type="submit" id="authBtn" class="w-full gold-btn text-white font-bold py-3 rounded-lg">Continue</button>
-        </form>
-        
-        <div class="text-center mt-4">
-            <button onclick="toggleAuthMode()" id="authToggle" class="text-purple-600 font-medium text-sm">Create account</button>
-        </div>
-        
-        <p class="text-center text-gray-500 text-xs mt-4">OTP sent to: ${ADMIN_EMAIL}</p>
-    </div>
-</div>
-
-<!-- CUSTOMER APP -->
-<div id="customerApp" class="hide pb-20">
-    <div class="gradient-bg text-white p-4 sticky top-0 z-40">
-        <div class="flex justify-between items-center">
-            <div>
-                <h2 class="text-xl font-bold">Click One Solution</h2>
-                <p class="text-sm opacity-90" id="customerLocation">📍 Detecting...</p>
-            </div>
-            <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center text-purple-600 font-bold" id="customerAvatar">U</div>
-        </div>
-    </div>
-    
-    <div id="customerHome" class="p-4">
-        <input type="text" placeholder="Search services..." class="w-full px-4 py-3 pl-12 rounded-xl border mb-6">
-        
-        <h3 class="font-bold mb-3">Home Services</h3>
-        <div class="grid grid-cols-4 gap-3 mb-6">
-            <div onclick="showProviders('electrician')" class="text-center cursor-pointer"><div class="w-14 h-14 bg-yellow-100 rounded-xl flex items-center justify-center text-2xl mx-auto mb-1">⚡</div><span class="text-xs">Electrician</span></div>
-            <div onclick="showProviders('plumber')" class="text-center cursor-pointer"><div class="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center text-2xl mx-auto mb-1">🚿</div><span class="text-xs">Plumber</span></div>
-            <div onclick="showProviders('carpenter')" class="text-center cursor-pointer"><div class="w-14 h-14 bg-amber-100 rounded-xl flex items-center justify-center text-2xl mx-auto mb-1">🔨</div><span class="text-xs">Carpenter</span></div>
-            <div onclick="showProviders('ac')" class="text-center cursor-pointer"><div class="w-14 h-14 bg-cyan-100 rounded-xl flex items-center justify-center text-2xl mx-auto mb-1">❄️</div><span class="text-xs">AC</span></div>
-        </div>
-        
-        <h3 class="font-bold mb-3">Transport</h3>
-        <div class="grid grid-cols-4 gap-3 mb-6">
-            <div onclick="showProviders('taxi')" class="text-center cursor-pointer"><div class="w-14 h-14 bg-purple-100 rounded-xl flex items-center justify-center text-2xl mx-auto mb-1">🚕</div><span class="text-xs">Taxi</span></div>
-            <div onclick="showProviders('bike')" class="text-center cursor-pointer"><div class="w-14 h-14 bg-red-100 rounded-xl flex items-center justify-center text-2xl mx-auto mb-1">🏍️</div><span class="text-xs">Bike</span></div>
-            <div onclick="showProviders('auto')" class="text-center cursor-pointer"><div class="w-14 h-14 bg-teal-100 rounded-xl flex items-center justify-center text-2xl mx-auto mb-1">🛺</div><span class="text-xs">Auto</span></div>
-        </div>
-        
-        <h3 class="font-bold mb-3">My Bookings</h3>
-        <div id="customerBookings" class="space-y-3"></div>
-    </div>
-    
-    <div id="providersList" class="hide p-4">
-        <button onclick="showScreen('customerHome')" class="mb-4 text-gray-600"><i class="fas fa-arrow-left mr-2"></i>Back</button>
-        <h3 class="font-bold text-lg mb-3" id="serviceTitle">Providers</h3>
-        <div id="map" class="mb-4"><span class="text-gray-500">MapMyIndia Map</span></div>
-        <div id="providersContainer" class="space-y-3"></div>
-    </div>
-    
-    <div id="providerProfile" class="hide p-4">
-        <button onclick="showScreen('providersList')" class="mb-4 text-gray-600"><i class="fas fa-arrow-left mr-2"></i>Back</button>
-        <div id="profileContent"></div>
-    </div>
-    
-    <div id="bookingScreen" class="hide p-4">
-        <button onclick="showScreen('providerProfile')" class="mb-4 text-gray-600"><i class="fas fa-arrow-left mr-2"></i>Back</button>
-        <div id="bookingContent"></div>
-    </div>
-    
-    <div id="walletScreen" class="hide p-4">
-        <h3 class="font-bold text-xl mb-4">My Wallet</h3>
-        <div class="gradient-bg rounded-2xl p-6 text-white mb-6">
-            <p class="text-sm opacity-90">Balance</p>
-            <h2 class="text-4xl font-bold" id="walletBalance">₹0</h2>
-        </div>
-        
-        <div class="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <h4 class="font-bold mb-3">Add Money</h4>
-            <input type="number" id="topupAmount" placeholder="Amount (₹100-₹5000)" class="w-full px-3 py-2 border rounded-lg mb-3">
-            <div class="text-center mb-3">
-                <img src="${ADMIN_QR}" class="mx-auto rounded-lg max-w-xs mb-2">
-                <p class="text-sm font-bold">Pay to: ${ADMIN_UPI}</p>
-                <p class="text-xs text-gray-500">UPI ID editable by admin</p>
-            </div>
-            <input type="text" id="utrNumber" placeholder="UTR Number" class="w-full px-3 py-2 border rounded-lg mb-3">
-            <button onclick="requestTopUp()" class="w-full gold-btn text-white py-3 rounded-lg font-bold">I've Paid</button>
-        </div>
-        
-        <div id="transactionHistory" class="space-y-3"></div>
-    </div>
-    
-    <div id="profileScreen" class="hide p-4">
-        <h3 class="font-bold text-xl mb-4">Profile</h3>
-        <div class="bg-white rounded-xl p-6 shadow-sm mb-4 text-center">
-            <div class="w-24 h-24 bg-purple-100 rounded-full mx-auto mb-3 flex items-center justify-center text-4xl">👤</div>
-            <h4 class="font-bold text-lg" id="profileName">User</h4>
-            <p class="text-gray-500" id="profileEmail">email</p>
-        </div>
-        <button onclick="logout()" class="w-full bg-red-500 text-white py-3 rounded-xl font-bold">Logout</button>
-    </div>
-    
-    <div class="bottom-nav flex justify-around">
-        <button onclick="navigate('customerHome')" class="flex flex-col items-center text-purple-600"><i class="fas fa-home text-xl mb-1"></i><span class="text-xs">Home</span></button>
-        <button onclick="navigate('walletScreen')" class="flex flex-col items-center text-gray-400"><i class="fas fa-wallet text-xl mb-1"></i><span class="text-xs">Wallet</span></button>
-        <button onclick="navigate('profileScreen')" class="flex flex-col items-center text-gray-400"><i class="fas fa-user text-xl mb-1"></i><span class="text-xs">Profile</span></button>
-    </div>
-    
-    <button onclick="emergency()" class="emergency-btn"><i class="fas fa-exclamation-triangle text-xl"></i></button>
-</div>
-
-<!-- PROVIDER APP -->
-<div id="providerApp" class="hide pb-20">
-    <div class="gradient-bg text-white p-4 sticky top-0 z-40">
-        <div class="flex justify-between items-center">
-            <h2 class="text-xl font-bold">Provider Dashboard</h2>
-            <button onclick="logout()" class="text-white"><i class="fas fa-sign-out-alt"></i></button>
-        </div>
-    </div>
-    
-    <div class="p-4 bg-white m-4 rounded-xl shadow-sm">
-        <div class="flex justify-between items-center">
-            <div>
-                <h3 class="font-bold">Availability</h3>
-                <p class="text-sm text-gray-500">Receive job requests</p>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" id="availabilityToggle" class="sr-only peer" onchange="toggleAvailability()">
-                <div class="w-11 h-6 bg-gray-200 peer-checked:bg-green-500 rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-            </label>
-        </div>
-    </div>
-    
-    <div class="px-4 mb-4">
-        <div class="gradient-bg rounded-xl p-4 text-white">
-            <p class="text-sm opacity-90">Earnings</p>
-            <h3 class="text-3xl font-bold" id="providerEarnings">₹0</h3>
-            <button onclick="showWithdrawal()" class="mt-2 bg-white text-purple-600 px-4 py-2 rounded-lg text-sm font-bold">Withdraw</button>
-        </div>
-    </div>
-    
-    <div class="px-4 mb-4">
-        <h3 class="font-bold text-lg mb-3">New Requests</h3>
-        <div id="providerRequests" class="space-y-3"></div>
-    </div>
-    
-    <div class="px-4">
-        <h3 class="font-bold text-lg mb-3">Active Jobs</h3>
-        <div id="providerActiveJobs" class="space-y-3"></div>
-    </div>
-</div>
-
-<!-- ADMIN APP -->
-<div id="adminApp" class="hide pb-20">
-    <div class="bg-gray-900 text-white p-4 sticky top-0 z-40">
-        <div class="flex justify-between items-center">
-            <h2 class="text-xl font-bold">🛡️ Admin Panel</h2>
-            <button onclick="logout()" class="text-white"><i class="fas fa-sign-out-alt"></i></button>
-        </div>
-    </div>
-    
-    <div class="p-4 grid grid-cols-2 gap-3 mb-4">
-        <div class="bg-blue-500 text-white rounded-xl p-4">
-            <p class="text-sm opacity-90">Users</p>
-            <h3 class="text-2xl font-bold" id="statUsers">0</h3>
-        </div>
-        <div class="bg-green-500 text-white rounded-xl p-4">
-            <p class="text-sm opacity-90">Providers</p>
-            <h3 class="text-2xl font-bold" id="statProviders">0</h3>
-        </div>
-        <div class="bg-purple-500 text-white rounded-xl p-4">
-            <p class="text-sm opacity-90">Bookings</p>
-            <h3 class="text-2xl font-bold" id="statBookings">0</h3>
-        </div>
-        <div class="bg-orange-500 text-white rounded-xl p-4">
-            <p class="text-sm opacity-90">Revenue</p>
-            <h3 class="text-2xl font-bold" id="statRevenue">₹0</h3>
-        </div>
-    </div>
-    
-    <div class="px-4 space-y-3">
-        <button onclick="showAdminSection('paymentSettings')" class="w-full bg-white p-4 rounded-xl shadow-sm flex justify-between items-center">
-            <span class="font-bold"><i class="fas fa-cog mr-2 text-purple-500"></i>Payment Settings</span>
-            <i class="fas fa-chevron-right text-gray-400"></i>
-        </button>
-        <button onclick="showAdminSection('manageAdmins')" class="w-full bg-white p-4 rounded-xl shadow-sm flex justify-between items-center">
-            <span class="font-bold"><i class="fas fa-user-shield mr-2 text-red-500"></i>Manage Admins</span>
-            <i class="fas fa-chevron-right text-gray-400"></i>
-        </button>
-    </div>
-    
-    <div id="adminSections" class="px-4 mt-4">
-        <div id="paymentSettingsSection" class="hide">
-            <h3 class="font-bold text-lg mb-3">Payment Settings</h3>
-            <div class="bg-white rounded-xl p-4 shadow-sm space-y-4">
-                <div>
-                    <label class="text-sm text-gray-600">Admin UPI ID</label>
-                    <input type="text" id="adminUpiId" value="${ADMIN_UPI}" class="w-full px-3 py-2 border rounded-lg mt-1">
-                </div>
-                <div>
-                    <label class="text-sm text-gray-600">QR Code URL</label>
-                    <input type="text" id="adminQrUrl" value="${ADMIN_QR}" class="w-full px-3 py-2 border rounded-lg mt-1">
-                    <img src="${ADMIN_QR}" class="w-32 mt-2 rounded-lg">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-sm text-gray-600">Min Top-up</label>
-                        <input type="number" id="minTopup" value="100" class="w-full px-3 py-2 border rounded-lg mt-1">
-                    </div>
-                    <div>
-                        <label class="text-sm text-gray-600">Max Top-up</label>
-                        <input type="number" id="maxTopup" value="5000" class="w-full px-3 py-2 border rounded-lg mt-1">
+                    <!-- Auth Form -->
+                    <div id="authForm" class="space-y-5">
+                        <div class="relative">
+                            <i class="fas fa-envelope absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            <input type="email" id="emailInput" class="input-field pl-14" placeholder="Enter your email address" autocomplete="email">
+                        </div>
+                        <div class="relative">
+                            <i class="fas fa-lock absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            <input type="password" id="passwordInput" class="input-field pl-14" placeholder="Enter password" autocomplete="current-password">
+                        </div>
+                        <div class="relative" id="nameField" style="display: none;">
+                            <i class="fas fa-user absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            <input type="text" id="nameInput" class="input-field pl-14" placeholder="Your full name" autocomplete="name">
+                        </div>
+                        
+                        <button class="btn-primary btn-gold" onclick="handleAuth()" id="authBtn">
+                            <i class="fas fa-sign-in-alt mr-2"></i>Continue
+                        </button>
+                        
+                        <div class="flex justify-between text-sm">
+                            <button onclick="toggleAuthMode()" class="text-yellow-400 hover:text-yellow-300 font-semibold" id="authToggle">
+                                Create account
+                            </button>
+                            <button onclick="showForgotPassword()" class="text-gray-400 hover:text-white">
+                                Forgot password?
+                            </button>
+                        </div>
+                        
+                        <div class="relative my-6">
+                            <div class="absolute inset-0 flex items-center">
+                                <div class="w-full border-t border-white/10"></div>
+                            </div>
+                            <div class="relative flex justify-center text-sm">
+                                <span class="px-2 bg-[#0a0a0a] text-gray-500">Or continue with</span>
+                            </div>
+                        </div>
+                        
+                        <button class="w-full py-4 rounded-xl bg-white/5 border border-white/10 text-white font-semibold flex items-center justify-center gap-3 hover:bg-white/10 transition-all" onclick="signInWithGoogle()">
+                            <i class="fab fa-google text-red-400 text-xl"></i>
+                            Google
+                        </button>
                     </div>
                 </div>
-                <button onclick="savePaymentSettings()" class="w-full gold-btn text-white py-3 rounded-lg font-bold">Save Settings</button>
             </div>
         </div>
-        
-        <div id="manageAdminsSection" class="hide">
-            <h3 class="font-bold text-lg mb-3">Manage Admins</h3>
-            <div class="bg-white rounded-xl p-4 shadow-sm mb-4">
-                <input type="email" id="newAdminEmail" placeholder="New admin email" class="w-full px-3 py-2 border rounded-lg mb-3">
-                <button onclick="addNewAdmin()" class="w-full bg-gray-900 text-white py-2 rounded-lg font-bold">Add Admin</button>
+
+        <!-- OTP Modal for Admin -->
+        <div class="modal" id="otpModal">
+            <div class="modal-content">
+                <div class="text-center mb-6">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full gold-gradient flex items-center justify-center">
+                        <i class="fas fa-shield-alt text-black text-2xl"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-white mb-2">Admin Verification</h3>
+                    <p class="text-gray-400">Enter OTP sent to<br><span class="gold-text">skatoch829@gmail.com</span></p>
+                </div>
+                
+                <div class="flex justify-center gap-3 mb-6">
+                    <input type="text" class="otp-input" maxlength="1" id="otp1" onkeyup="moveOtp(1)">
+                    <input type="text" class="otp-input" maxlength="1" id="otp2" onkeyup="moveOtp(2)">
+                    <input type="text" class="otp-input" maxlength="1" id="otp3" onkeyup="moveOtp(3)">
+                    <input type="text" class="otp-input" maxlength="1" id="otp4" onkeyup="moveOtp(4)">
+                    <input type="text" class="otp-input" maxlength="1" id="otp5" onkeyup="moveOtp(5)">
+                    <input type="text" class="otp-input" maxlength="1" id="otp6" onkeyup="verifyOtp()">
+                </div>
+                
+                <button class="btn-primary btn-gold mb-4" onclick="verifyOtp()">
+                    <i class="fas fa-check-circle mr-2"></i>Verify OTP
+                </button>
+                
+                <button class="w-full py-3 text-gray-400" onclick="resendOtp()">
+                    Resend OTP
+                </button>
+                
+                <button class="w-full py-3 text-gray-500 mt-2" onclick="closeOtpModal()">
+                    Cancel
+                </button>
             </div>
-            <div id="adminList" class="space-y-2"></div>
+        </div>
+
+        <!-- Main App -->
+        <div id="mainApp" style="display: none;">
+            <!-- User Home Screen -->
+            <div class="screen active" id="homeScreen">
+                <div class="sticky top-0 z-50 bg-gradient-to-b from-[#0a0a0a] to-transparent pt-4 pb-2 px-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <p class="text-gray-400 text-xs uppercase tracking-wider mb-1">Welcome back</p>
+                            <h2 class="text-2xl font-bold text-white" id="userNameDisplay">User</h2>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full gold-gradient flex items-center justify-center text-black font-bold text-lg" id="userAvatar">U</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-400 bg-white/5 rounded-full px-4 py-2 border border-white/10">
+                        <i class="fas fa-map-marker-alt gold-text"></i>
+                        <span id="locationText">Detecting location...</span>
+                    </div>
+                    <div id="locationPermissionBtn" style="display: none;" class="text-center mt-2">
+                        <button class="location-permission-btn" onclick="requestLocationPermission()">
+                            <i class="fas fa-location-arrow mr-2"></i>Enable Location
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="px-4 pb-24">
+                    <div class="relative mb-6">
+                        <i class="fas fa-search absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" class="input-field pl-14" placeholder="Search for services..." onkeyup="searchServices(this.value)">
+                    </div>
+
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-white">Home Services</h3>
+                            <span class="text-xs gold-text">10% Commission</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-3" id="homeServices"></div>
+                    </div>
+
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-white">Taxi Services</h3>
+                            <span class="text-xs gold-text">10% Commission</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-3" id="taxiServices"></div>
+                    </div>
+
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-white">Other Services</h3>
+                            <span class="text-xs gold-text">16% Commission</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-3" id="otherServices"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-white">My Bookings</h3>
+                            <button onclick="showScreen('bookings')" class="text-sm gold-text">View All</button>
+                        </div>
+                        <div id="recentBookings">
+                            <p class="text-gray-500 text-center py-4">No bookings yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bookings Screen -->
+            <div class="screen" id="bookingsScreen">
+                <div class="sticky top-0 z-50 bg-[#0a0a0a] pt-4 pb-2 px-4 border-b border-white/10">
+                    <div class="flex items-center gap-4">
+                        <button onclick="showScreen('home')" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <h2 class="text-xl font-bold text-white">My Bookings</h2>
+                    </div>
+                </div>
+                <div class="p-4" id="allBookings">
+                    <p class="text-gray-500 text-center py-4">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Wallet Screen -->
+            <div class="screen" id="walletScreen">
+                <div class="sticky top-0 z-50 bg-[#0a0a0a] pt-4 pb-2 px-4">
+                    <h2 class="text-xl font-bold text-white">My Wallet</h2>
+                </div>
+                <div class="p-4">
+                    <div class="card text-center py-8 mb-6 relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-full h-full gold-gradient opacity-10"></div>
+                        <p class="text-gray-400 mb-2 relative z-10">Available Balance</p>
+                        <h3 class="text-5xl font-black gold-text mb-4 relative z-10" id="walletBalance">₹0</h3>
+                        <div class="flex gap-3 relative z-10">
+                            <button class="flex-1 py-3 rounded-xl bg-white/10 text-white font-semibold border border-white/20" onclick="showAddMoney()">
+                                <i class="fas fa-plus mr-2"></i>Add Money
+                            </button>
+                            <button class="flex-1 py-3 rounded-xl bg-white/10 text-white font-semibold border border-white/20" onclick="viewHistory()">
+                                <i class="fas fa-history mr-2"></i>History
+                            </button>
+                        </div>
+                    </div>
+                    <div id="transactionList">
+                        <p class="text-gray-500 text-center py-4">No transactions yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Money Screen -->
+            <div class="screen" id="addMoneyScreen">
+                <div class="sticky top-0 z-50 bg-[#0a0a0a] pt-4 pb-2 px-4 border-b border-white/10">
+                    <div class="flex items-center gap-4">
+                        <button onclick="showScreen('wallet')" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <h2 class="text-xl font-bold text-white">Add Money</h2>
+                    </div>
+                </div>
+                <div class="p-4 pb-24">
+                    <div class="card mb-4">
+                        <label class="text-gray-400 text-sm mb-2 block">Enter Amount</label>
+                        <div class="flex items-center gap-2">
+                            <span class="text-3xl font-bold gold-text">₹</span>
+                            <input type="number" id="addAmount" class="input-field text-2xl font-bold" placeholder="500" value="500">
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-3 mb-6">
+                        <button onclick="setAmount(100)" class="flex-1 py-3 rounded-xl bg-white/5 border border-white/20 text-white font-medium hover:bg-white/10">₹100</button>
+                        <button onclick="setAmount(500)" class="flex-1 py-3 rounded-xl bg-white/5 border border-white/20 text-white font-medium hover:bg-white/10">₹500</button>
+                        <button onclick="setAmount(1000)" class="flex-1 py-3 rounded-xl bg-white/5 border border-white/20 text-white font-medium hover:bg-white/10">₹1000</button>
+                    </div>
+                    
+                    <div class="qr-container mb-4 mx-auto" style="max-width: 280px;">
+                        <p class="text-gray-800 font-semibold mb-3">Scan to Pay</p>
+                        <img id="upiQrImage" src="https://i.ibb.co/b5wKDvrV/qr-code.jpg" alt="UPI QR Code" class="mx-auto" style="max-width: 240px;">
+                        <p class="text-gray-600 text-sm mt-3">UPI ID: <span class="font-bold" id="upiIdDisplay">notabhiraj@fam</span></p>
+                        <p class="text-gray-600 text-sm">Amount: ₹<span id="qrAmount">500</span></p>
+                    </div>
+                    
+                    <button onclick="copyUpiId()" class="w-full py-3 rounded-xl bg-white/10 text-white font-semibold border border-white/20 mb-4">
+                        <i class="fas fa-copy mr-2"></i>Copy UPI ID
+                    </button>
+                    
+                    <div class="card mb-4">
+                        <label class="text-gray-400 text-sm mb-2 block">UTR Number (after payment)</label>
+                        <input type="text" id="utrNumber" class="input-field" placeholder="Enter UTR/Reference number">
+                    </div>
+                    
+                    <button onclick="submitTopUpRequest()" class="btn-primary btn-gold">
+                        <i class="fas fa-check-circle mr-2"></i>I've Paid - Submit Request
+                    </button>
+                    
+                    <p class="text-center text-gray-500 text-sm mt-4">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Admin will verify and add money to your wallet
+                    </p>
+                </div>
+            </div>
+
+            <!-- Profile Screen -->
+            <div class="screen" id="profileScreen">
+                <div class="sticky top-0 z-50 bg-gradient-to-b from-[#0a0a0a] to-transparent pt-4 pb-2 px-4">
+                    <h2 class="text-xl font-bold text-white">Profile</h2>
+                </div>
+                <div class="p-4">
+                    <div class="card text-center py-8 mb-6 relative">
+                        <button class="edit-btn" onclick="toggleEditProfile()" title="Edit Profile">
+                            <i class="fas fa-pencil-alt"></i>
+                        </button>
+                        
+                        <div class="w-24 h-24 mx-auto mb-4 rounded-full gold-gradient flex items-center justify-center text-black text-3xl font-bold" id="profileAvatar">U</div>
+                        
+                        <div id="profileViewMode">
+                            <h3 class="text-2xl font-bold text-white mb-1" id="profileName">User</h3>
+                            <p class="text-gray-400 mb-3" id="profileEmail">user@email.com</p>
+                            <p class="text-gray-400 mb-2" id="profilePhoneDisplay"><i class="fas fa-phone mr-2"></i>Not set</p>
+                            <p class="text-gray-400 mb-3" id="profileAddressDisplay"><i class="fas fa-map-marker-alt mr-2"></i>Not set</p>
+                            <span class="inline-block px-4 py-1 rounded-full bg-white/10 gold-text text-sm font-semibold border border-yellow-500/30" id="profileRole">User</span>
+                        </div>
+                        
+                        <div id="profileEditMode" style="display: none;" class="text-left space-y-4 mt-4">
+                            <div>
+                                <label class="text-gray-400 text-sm">Name</label>
+                                <input type="text" id="editName" class="input-field mt-1">
+                            </div>
+                            <div>
+                                <label class="text-gray-400 text-sm">Phone</label>
+                                <input type="tel" id="editPhone" class="input-field mt-1" placeholder="+91 98765 43210">
+                            </div>
+                            <div>
+                                <label class="text-gray-400 text-sm">Address</label>
+                                <textarea id="editAddress" class="input-field mt-1" rows="2" placeholder="Your full address"></textarea>
+                            </div>
+                            <div class="flex gap-3 pt-2">
+                                <button class="flex-1 py-3 rounded-xl bg-green-600 text-white font-semibold" onclick="saveProfile()">
+                                    <i class="fas fa-save mr-2"></i>Save
+                                </button>
+                                <button class="flex-1 py-3 rounded-xl bg-white/10 text-white font-semibold" onclick="toggleEditProfile()">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div class="card flex items-center gap-4 py-4 cursor-pointer" onclick="showScreen('wallet')">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white">
+                                <i class="fas fa-wallet text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-white">My Wallet</h4>
+                                <p class="text-sm text-gray-400">View balance & transactions</p>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-400"></i>
+                        </div>
+                        
+                        <div class="card flex items-center gap-4 py-4 cursor-pointer" onclick="updateLocation()">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center text-white">
+                                <i class="fas fa-map-marker-alt text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-white">Update Location</h4>
+                                <p class="text-sm text-gray-400" id="locationMenuText">Tap to refresh location</p>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-400"></i>
+                        </div>
+                        
+                        <div class="card flex items-center gap-4 py-4 cursor-pointer" onclick="showHelp()">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white">
+                                <i class="fas fa-headset text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-white">Help & Support</h4>
+                                <p class="text-sm text-gray-400">Contact customer care</p>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-400"></i>
+                        </div>
+                    </div>
+                    
+                    <button class="w-full mt-6 py-4 rounded-xl bg-gradient-to-r from-red-500 to-red-700 text-white font-bold text-lg shadow-lg" onclick="logout()">
+                        <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                    </button>
+                </div>
+            </div>
+
+            <!-- Admin Panel -->
+            <div class="screen admin-panel" id="adminScreen">
+                <div class="sticky top-0 z-50 bg-[#0d1b2a] pt-4 pb-2 px-4 border-b border-white/10">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xl font-bold text-white"><i class="fas fa-shield-alt gold-text mr-2"></i>Admin Panel</h2>
+                        <button onclick="logout()" class="text-sm text-gray-400">Logout</button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="stat-card">
+                            <h3 class="stat-number" id="adminUsers">0</h3>
+                            <p class="text-gray-400 text-sm">Users</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3 class="stat-number text-green-400" id="adminProviders">0</h3>
+                            <p class="text-gray-400 text-sm">Providers</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3 class="stat-number text-blue-400" id="adminBookings">0</h3>
+                            <p class="text-gray-400 text-sm">Bookings</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3 class="stat-number text-orange-400" id="adminPending">0</h3>
+                            <p class="text-gray-400 text-sm">Pending</p>
+                        </div>
+                    </div>
+
+                    <div class="card mb-6">
+                        <h3 class="text-lg font-bold text-white mb-4"><i class="fas fa-percentage gold-text mr-2"></i>Commission Settings</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                                <div>
+                                    <p class="text-white font-medium">Home & Taxi Services</p>
+                                    <p class="text-xs text-gray-400">Electrician, Plumber, Taxi, etc.</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="commHome" value="10" class="w-16 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-center text-white" onchange="updateCommission('home', this.value)">
+                                    <span class="text-gray-400">%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                                <div>
+                                    <p class="text-white font-medium">Other Services</p>
+                                    <p class="text-xs text-gray-400">Photo, Event, DJ, Makeup, etc.</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="commOther" value="16" class="w-16 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-center text-white" onchange="updateCommission('other', this.value)">
+                                    <span class="text-gray-400">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn-primary btn-gold mt-4" onclick="saveCommissionSettings()">
+                            <i class="fas fa-save mr-2"></i>Save Commission
+                        </button>
+                    </div>
+
+                    <div class="card mb-6">
+                        <h3 class="text-lg font-bold text-white mb-4"><i class="fas fa-cog gold-text mr-2"></i>Payment Settings</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-gray-400 text-sm">Admin UPI ID</label>
+                                <input type="text" id="adminUpiId" class="input-field mt-1" value="notabhiraj@fam">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-gray-400 text-sm">Min Top-up (₹)</label>
+                                    <input type="number" id="minTopup" class="input-field mt-1" value="100">
+                                </div>
+                                <div>
+                                    <label class="text-gray-400 text-sm">Max Top-up (₹)</label>
+                                    <input type="number" id="maxTopup" class="input-field mt-1" value="5000">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-gray-400 text-sm">Min Withdrawal (₹)</label>
+                                <input type="number" id="minWithdrawal" class="input-field mt-1" value="500">
+                            </div>
+                        </div>
+                        <button class="btn-primary btn-gold mt-4" onclick="savePaymentSettings()">
+                            <i class="fas fa-save mr-2"></i>Save Payment Settings
+                        </button>
+                    </div>
+
+                    <div class="card mb-6">
+                        <h3 class="text-lg font-bold text-white mb-4"><i class="fas fa-user-clock gold-text mr-2"></i>Pending Providers</h3>
+                        <div id="pendingProvidersList">
+                            <p class="text-gray-500 text-center py-4">Loading...</p>
+                        </div>
+                    </div>
+
+                    <div class="card mb-6">
+                        <h3 class="text-lg font-bold text-white mb-4"><i class="fas fa-wallet gold-text mr-2"></i>Wallet Requests</h3>
+                        <div class="mb-4">
+                            <h4 class="text-sm text-gray-400 mb-2">Pending Top-ups</h4>
+                            <div id="pendingTopupsList">
+                                <p class="text-gray-500 text-center py-2">No pending top-ups</p>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="text-sm text-gray-400 mb-2">Pending Withdrawals</h4>
+                            <div id="pendingWithdrawalsList">
+                                <p class="text-gray-500 text-center py-2">No pending withdrawals</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="text-lg font-bold text-white mb-4"><i class="fas fa-user-shield gold-text mr-2"></i>Manage Admins</h3>
+                        <div class="space-y-3">
+                            <input type="email" id="newAdminEmail" class="input-field" placeholder="New Admin Email">
+                            <input type="password" id="newAdminPassword" class="input-field" placeholder="Password">
+                            <button class="btn-primary" onclick="addNewAdmin()">
+                                <i class="fas fa-plus mr-2"></i>Add Admin
+                            </button>
+                        </div>
+                        <div id="adminsList" class="mt-4 space-y-2">
+                            <div class="p-3 rounded-xl bg-white/5 flex justify-between items-center">
+                                <span class="text-white">skatoch829@gmail.com</span>
+                                <span class="text-xs gold-text">Super Admin</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Provider Dashboard -->
+            <div class="screen" id="providerScreen">
+                <div class="sticky top-0 z-50 bg-gradient-to-b from-[#0a0a0a] to-transparent pt-4 pb-2 px-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-xl font-bold text-white">Provider Dashboard</h2>
+                            <p class="text-sm text-green-400" id="providerStatus">● Available</p>
+                        </div>
+                        <button onclick="logout()" class="text-sm text-gray-400">Logout</button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="card mb-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="font-bold text-white">Availability</h3>
+                                <p class="text-sm text-gray-400">Turn off when not working</p>
+                            </div>
+                            <div class="toggle-switch active" id="availabilityToggle" onclick="toggleAvailability()"></div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-6">
+                        <h3 class="font-bold text-white mb-2">Wallet Balance</h3>
+                        <p class="text-4xl font-black gold-text mb-2" id="providerWallet">₹0</p>
+                        <button class="btn-primary btn-gold mt-3" onclick="showWithdrawalScreen()">
+                            <i class="fas fa-money-bill-wave mr-2"></i>Request Withdrawal
+                        </button>
+                    </div>
+
+                    <div class="card mb-6">
+                        <h3 class="font-bold text-white mb-4"><i class="fas fa-bell gold-text mr-2"></i>New Requests</h3>
+                        <div id="providerRequests">
+                            <p class="text-gray-500 text-center py-4">No new requests</p>
+                        </div>
+                    </div>
+
+                    <div class="card mb-6">
+                        <h3 class="font-bold text-white mb-4"><i class="fas fa-tasks gold-text mr-2"></i>Active Jobs</h3>
+                        <div id="providerActiveJobs">
+                            <p class="text-gray-500 text-center py-4">No active jobs</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="font-bold text-white mb-4"><i class="fas fa-star gold-text mr-2"></i>My Stats</h3>
+                        <div class="grid grid-cols-3 gap-4 text-center">
+                            <div>
+                                <p class="text-2xl font-bold gold-text" id="providerJobsCompleted">0</p>
+                                <p class="text-sm text-gray-400">Jobs Done</p>
+                            </div>
+                            <div>
+                                <p class="text-2xl font-bold gold-text" id="providerRating">0.0</p>
+                                <p class="text-sm text-gray-400">Rating</p>
+                            </div>
+                            <div>
+                                <p class="text-2xl font-bold gold-text" id="providerEarnings">₹0</p>
+                                <p class="text-sm text-gray-400">Earnings</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Withdrawal Screen -->
+            <div class="screen" id="withdrawalScreen">
+                <div class="sticky top-0 z-50 bg-[#0a0a0a] pt-4 pb-2 px-4 border-b border-white/10">
+                    <div class="flex items-center gap-4">
+                        <button onclick="showScreen('provider')" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <h2 class="text-xl font-bold text-white">Withdraw Earnings</h2>
+                    </div>
+                </div>
+                <div class="p-4 pb-24">
+                    <div class="card mb-4">
+                        <p class="text-gray-400 text-sm mb-1">Available Balance</p>
+                        <h3 class="text-3xl font-bold gold-text" id="withdrawalBalance">₹0</h3>
+                    </div>
+                    
+                    <div class="card mb-4">
+                        <label class="text-gray-400 text-sm mb-2 block">Withdrawal Amount</label>
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl font-bold gold-text">₹</span>
+                            <input type="number" id="withdrawalAmount" class="input-field text-xl font-bold" placeholder="Enter amount">
+                        </div>
+                    </div>
+                    
+                    <div class="card mb-4">
+                        <label class="text-gray-400 text-sm mb-2 block">UPI ID</label>
+                        <input type="text" id="withdrawalUpi" class="input-field" placeholder="yourname@upi">
+                    </div>
+                    
+                    <button onclick="submitWithdrawalRequest()" class="btn-primary btn-gold">
+                        <i class="fas fa-paper-plane mr-2"></i>Request Withdrawal
+                    </button>
+                    
+                    <p class="text-center text-gray-500 text-sm mt-4">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Admin will process your request within 24 hours
+                    </p>
+                </div>
+            </div>
+
+            <!-- Chat Screen -->
+            <div class="screen" id="chatScreen">
+                <div class="sticky top-0 z-50 bg-[#0a0a0a] pt-4 pb-2 px-4 border-b border-white/10">
+                    <div class="flex items-center gap-4">
+                        <button onclick="closeChat()" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <div>
+                            <h2 class="text-lg font-bold text-white" id="chatPartnerName">Provider</h2>
+                            <p class="text-sm text-gray-400" id="chatPartnerService">Service</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 pb-32" id="chatMessages" style="min-height: calc(100vh - 200px);">
+                    <p class="text-gray-500 text-center py-4">No messages yet</p>
+                </div>
+                <div class="fixed bottom-0 left-0 right-0 bg-[#0a0a0a] p-4 border-t border-white/10" style="max-width: 430px; margin: 0 auto;">
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="chatInput" class="input-field flex-1" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMessage()">
+                        <button onclick="sendMessage()" class="w-12 h-12 rounded-full gold-gradient flex items-center justify-center text-black">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="callPartner()" class="flex-1 py-2 rounded-xl bg-green-600 text-white text-sm">
+                            <i class="fas fa-phone mr-1"></i>Call
+                        </button>
+                        <button onclick="shareLocationInChat()" class="flex-1 py-2 rounded-xl bg-blue-600 text-white text-sm">
+                            <i class="fas fa-map-marker-alt mr-1"></i>Share Location
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Navigation -->
+            <nav class="bottom-nav" id="bottomNav">
+                <div class="nav-item active" onclick="showScreen('home')">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </div>
+                <div class="nav-item" onclick="showScreen('bookings')">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Bookings</span>
+                </div>
+                <div class="nav-item" onclick="showScreen('wallet')">
+                    <i class="fas fa-wallet"></i>
+                    <span>Wallet</span>
+                </div>
+                <div class="nav-item" onclick="showScreen('profile')">
+                    <i class="fas fa-user"></i>
+                    <span>Profile</span>
+                </div>
+            </nav>
+
+            <!-- Emergency Button -->
+            <button class="emergency-btn" onclick="showEmergency()" id="emergencyBtn">
+                <i class="fas fa-exclamation"></i>
+            </button>
+        </div>
+
+        <!-- Booking Modal -->
+        <div class="modal" id="bookingModal">
+            <div class="modal-content">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-white" id="modalServiceName">Book Service</h3>
+                    <button onclick="closeModal()" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-5">
+                    <div id="map" class="h-48 rounded-2xl overflow-hidden border border-white/10"></div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400 mb-2">Date & Time</label>
+                        <input type="datetime-local" id="bookingDateTime" class="input-field">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400 mb-2">Description</label>
+                        <textarea id="bookingDesc" class="input-field" rows="3" placeholder="Describe your requirement..."></textarea>
+                    </div>
+                    
+                    <div class="p-4 rounded-2xl bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30">
+                        <p class="text-sm text-yellow-200 mb-1">Estimated Price</p>
+                        <p class="text-3xl font-bold gold-text" id="modalPrice">₹0</p>
+                    </div>
+                    
+                    <button class="btn-primary btn-gold" onclick="submitBooking()" id="submitBookingBtn">
+                        <i class="fas fa-check-circle mr-2"></i>Confirm Booking
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Emergency Modal -->
+        <div class="modal" id="emergencyModal">
+            <div class="modal-content">
+                <h3 class="text-2xl font-bold text-red-500 mb-6 flex items-center">
+                    <i class="fas fa-exclamation-triangle mr-3"></i>Emergency Services
+                </h3>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="service-card border-2 border-red-500/50" onclick="bookEmergency('em-electrician')">
+                        <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-white text-2xl mx-auto mb-3">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <p class="text-center text-white font-semibold">Electrician</p>
+                    </div>
+                    <div class="service-card border-2 border-red-500/50" onclick="bookEmergency('em-plumber')">
+                        <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-white text-2xl mx-auto mb-3">
+                            <i class="fas fa-faucet"></i>
+                        </div>
+                        <p class="text-center text-white font-semibold">Plumber</p>
+                    </div>
+                    <div class="service-card border-2 border-red-500/50" onclick="bookEmergency('em-taxi')">
+                        <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-white text-2xl mx-auto mb-3">
+                            <i class="fas fa-taxi"></i>
+                        </div>
+                        <p class="text-center text-white font-semibold">Taxi</p>
+                    </div>
+                    <div class="service-card border-2 border-red-500/50" onclick="bookEmergency('em-ambulance')">
+                        <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-white text-2xl mx-auto mb-3">
+                            <i class="fas fa-ambulance"></i>
+                        </div>
+                        <p class="text-center text-white font-semibold">Ambulance</p>
+                    </div>
+                </div>
+                <button class="w-full py-4 rounded-xl border-2 border-white/20 text-white font-semibold" onclick="closeEmergency()">Cancel</button>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- JAVASCRIPT -->
-<script>
-let selectedRole = 'customer';
-let isLoginMode = true;
+    <script>
 
-function selectRole(role) {
-    selectedRole = role;
-    document.querySelectorAll('.role-btn').forEach(btn => {
-        btn.classList.remove('border-purple-500', 'bg-purple-50');
-        if(btn.dataset.role === role) btn.classList.add('border-purple-500', 'bg-purple-50');
-    });
-    
-    const adminNotice = document.getElementById('adminNotice');
-    const fullName = document.getElementById('fullName');
-    const phone = document.getElementById('phone');
-    const authToggle = document.getElementById('authToggle');
-    
-    if(role === 'admin') {
-        adminNotice.classList.remove('hide');
-        fullName.classList.add('hide');
-        phone.classList.add('hide');
-        authToggle.classList.add('hide');
-        isLoginMode = true;
-        document.getElementById('authBtn').textContent = 'Admin Login';
-    } else {
-        adminNotice.classList.add('hide');
-        authToggle.classList.remove('hide');
-        document.getElementById('authBtn').textContent = isLoginMode ? 'Continue' : 'Create Account';
-        if(!isLoginMode) {
-            fullName.classList.remove('hide');
-            phone.classList.remove('hide');
-        }
-    }
-}
+        // ==================== FIREBASE CONFIG ====================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDLU-IgBB-DrqTFd3ICOcIscVWdkC7ReeE",
+            authDomain: "click-one-solution-7af44.firebaseapp.com",
+            projectId: "click-one-solution-7af44",
+            storageBucket: "click-one-solution-7af44.firebasestorage.app",
+            messagingSenderId: "811454673502",
+            appId: "1:811454673502:web:30066b81e7488ab1667acf"
+        };
 
-function toggleAuthMode() {
-    isLoginMode = !isLoginMode;
-    document.getElementById('fullName').classList.toggle('hide');
-    document.getElementById('phone').classList.toggle('hide');
-    document.getElementById('authBtn').textContent = isLoginMode ? 'Continue' : 'Create Account';
-    document.getElementById('authToggle').textContent = isLoginMode ? 'Create account' : 'Already have an account?';
-}
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const storage = firebase.storage();
 
-async function handleAuth(e) {
-    e.preventDefault();
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    
-    if(selectedRole === 'admin') {
-        const adminDoc = await db.collection('admins').doc(email).get();
-        if(!adminDoc.exists) {
-            alert('Unauthorized admin access. Contact super admin.');
-            return;
-        }
-    }
-    
-    try {
-        if(isLoginMode) {
-            await auth.signInWithEmailAndPassword(email, password);
-        } else {
-            const cred = await auth.createUserWithEmailAndPassword(email, password);
-            const name = document.getElementById('fullName').value;
-            const phone = document.getElementById('phone').value;
+        // ==================== GLOBAL STATE ====================
+        let currentUser = null;
+        let userRole = 'user';
+        let map = null;
+        let userLocation = { lat: 26.8467, lng: 80.9462 };
+        let selectedService = null;
+        let isSignUp = false;
+        let isEditMode = false;
+        let currentChatId = null;
+        let chatUnsubscribe = null;
+        let generatedOtp = null;
+        let pendingAdminUser = null;
+
+        // Admin emails
+        const adminEmails = ['skatoch829@gmail.com'];
+
+        // ==================== SERVICE DATA ====================
+        const services = {
+            home: [
+                { id: 'electrician', name: 'Electrician', icon: 'fa-bolt', color: 'from-blue-500 to-blue-700', price: '₹200-500' },
+                { id: 'plumber', name: 'Plumber', icon: 'fa-faucet', color: 'from-cyan-500 to-cyan-700', price: '₹250-600' },
+                { id: 'carpenter', name: 'Carpenter', icon: 'fa-hammer', color: 'from-amber-600 to-amber-800', price: '₹300-800' },
+                { id: 'ac', name: 'AC Repair', icon: 'fa-snowflake', color: 'from-sky-400 to-sky-600', price: '₹500-1500' },
+                { id: 'cleaning', name: 'Cleaning', icon: 'fa-broom', color: 'from-emerald-500 to-emerald-700', price: '₹400-1200' },
+                { id: 'painter', name: 'Painter', icon: 'fa-paint-roller', color: 'from-pink-500 to-pink-700', price: '₹1000-5000' },
+                { id: 'cctv', name: 'CCTV', icon: 'fa-video', color: 'from-violet-500 to-violet-700', price: '₹800-2000' },
+                { id: 'construction', name: 'Construction', icon: 'fa-hard-hat', color: 'from-orange-600 to-orange-800', price: 'Custom' }
+            ],
+            taxi: [
+                { id: 'local', name: 'Local Ride', icon: 'fa-taxi', color: 'from-green-500 to-green-700', price: '₹50/km' },
+                { id: 'outstation', name: 'Outstation', icon: 'fa-road', color: 'from-teal-500 to-teal-700', price: '₹12/km' },
+                { id: 'bike', name: 'Bike Taxi', icon: 'fa-motorcycle', color: 'from-lime-500 to-lime-700', price: '₹20/km' },
+                { id: 'auto', name: 'Auto', icon: 'fa-taxi', color: 'from-yellow-500 to-yellow-700', price: 'Meter+₹10' }
+            ],
+            other: [
+                { id: 'photo', name: 'Photographer', icon: 'fa-camera', color: 'from-purple-500 to-purple-700', price: '₹2000+' },
+                { id: 'event', name: 'Event Planner', icon: 'fa-calendar', color: 'from-indigo-500 to-indigo-700', price: '₹5000+' },
+                { id: 'dj', name: 'DJ', icon: 'fa-music', color: 'from-fuchsia-500 to-fuchsia-700', price: '₹3000+' },
+                { id: 'makeup', name: 'Makeup', icon: 'fa-magic', color: 'from-rose-500 to-rose-700', price: '₹1500+' }
+            ]
+        };
+
+        // ==================== INITIALIZATION ====================
+        window.onload = function() {
+            renderServices();
+            setupOfflineDetection();
             
-            await db.collection('users').doc(cred.user.uid).set({
-                uid: cred.user.uid, email, name, phone, role: selectedRole,
-                wallet: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    loadUserData(user.uid);
+                } else {
+                    document.getElementById('loadingScreen').style.display = 'none';
+                }
             });
+
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('bookingDateTime').min = now.toISOString().slice(0, 16);
+            document.getElementById('bookingDateTime').value = now.toISOString().slice(0, 16);
+        };
+
+        function renderServices() {
+            const createCard = (service, category) => `
+                <div class="service-card flex flex-col items-center p-4" onclick="openBooking('${service.id}', '${service.name}', '${service.price}', '${category}')">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br ${service.color} flex items-center justify-center text-white text-xl mb-2 shadow-lg">
+                        <i class="fas ${service.icon}"></i>
+                    </div>
+                    <span class="text-xs text-gray-300 text-center">${service.name}</span>
+                </div>
+            `;
             
-            if(selectedRole === 'provider') {
-                await db.collection('providers').doc(cred.user.uid).set({
-                    uid: cred.user.uid, name, phone, services: [], availability: false,
-                    approved: false, rating: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            document.getElementById('homeServices').innerHTML = services.home.map(s => createCard(s, 'home')).join('');
+            document.getElementById('taxiServices').innerHTML = services.taxi.map(s => createCard(s, 'taxi')).join('');
+            document.getElementById('otherServices').innerHTML = services.other.map(s => createCard(s, 'other')).join('');
+        }
+
+        // ==================== AUTH FUNCTIONS ====================
+        function setRole(role) {
+            userRole = role;
+            const roles = ['User', 'Provider', 'Admin'];
+            const btnIds = ['btnUser', 'btnProvider', 'btnAdmin'];
+            
+            btnIds.forEach((id, index) => {
+                const btn = document.getElementById(id);
+                if (roles[index].toLowerCase() === role) {
+                    btn.className = 'flex-1 py-3.5 rounded-xl text-sm font-bold transition-all bg-gradient-to-r from-yellow-400 to-orange-500 text-black shadow-lg';
+                } else {
+                    btn.className = 'flex-1 py-3.5 rounded-xl text-sm font-bold transition-all text-gray-400 hover:text-white';
+                }
+            });
+        }
+
+        function toggleAuthMode() {
+            isSignUp = !isSignUp;
+            document.getElementById('nameField').style.display = isSignUp ? 'block' : 'none';
+            document.getElementById('authBtn').innerHTML = isSignUp ? '<i class="fas fa-user-plus mr-2"></i>Create Account' : '<i class="fas fa-sign-in-alt mr-2"></i>Continue';
+            document.getElementById('authToggle').textContent = isSignUp ? 'Already have an account?' : 'Create account';
+        }
+
+        async function handleAuth() {
+            const email = document.getElementById('emailInput').value.trim();
+            const password = document.getElementById('passwordInput').value;
+            const name = document.getElementById('nameInput').value.trim();
+            const btn = document.getElementById('authBtn');
+            
+            if (!email || !password) {
+                showToast('Please enter email and password');
+                return;
+            }
+            if (isSignUp && !name) {
+                showToast('Please enter your name');
+                return;
+            }
+            if (password.length < 6) {
+                showToast('Password must be at least 6 characters');
+                return;
+            }
+
+            // Check if admin login
+            if (userRole === 'admin') {
+                if (!adminEmails.includes(email)) {
+                    showToast('Unauthorized admin email');
+                    return;
+                }
+                // Generate and show OTP
+                generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                console.log('OTP for admin:', generatedOtp); // In production, send via email
+                showToast('OTP sent to skatoch829@gmail.com');
+                document.getElementById('otpModal').classList.add('active');
+                pendingAdminUser = { email, password };
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
+
+            try {
+                let userCredential;
+                if (isSignUp) {
+                    userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                    await db.collection('users').doc(userCredential.user.uid).set({
+                        email: email,
+                        name: name,
+                        role: userRole,
+                        wallet: 0,
+                        approved: userRole === 'user',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    if (userRole === 'provider') {
+                        await db.collection('providers').doc(userCredential.user.uid).set({
+                            uid: userCredential.user.uid,
+                            name: name,
+                            email: email,
+                            services: [],
+                            price: 200,
+                            rating: 0,
+                            reviews: 0,
+                            availability: false,
+                            workingHours: '9:00 AM - 6:00 PM',
+                            wallet: 0,
+                            earnings: 0,
+                            jobsCompleted: 0,
+                            approved: false,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                    
+                    showToast('Account created successfully!');
+                } else {
+                    userCredential = await auth.signInWithEmailAndPassword(email, password);
+                    await db.collection('users').doc(userCredential.user.uid).update({
+                        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+            } catch (error) {
+                showToast(error.message);
+                btn.disabled = false;
+                btn.innerHTML = isSignUp ? '<i class="fas fa-user-plus mr-2"></i>Create Account' : '<i class="fas fa-sign-in-alt mr-2"></i>Continue';
+            }
+        }
+
+        // ==================== OTP FUNCTIONS ====================
+        function moveOtp(index) {
+            if (index < 6) {
+                document.getElementById('otp' + (index + 1)).focus();
+            }
+        }
+
+        async function verifyOtp() {
+            const enteredOtp = 
+                document.getElementById('otp1').value +
+                document.getElementById('otp2').value +
+                document.getElementById('otp3').value +
+                document.getElementById('otp4').value +
+                document.getElementById('otp5').value +
+                document.getElementById('otp6').value;
+            
+            if (enteredOtp === generatedOtp) {
+                document.getElementById('otpModal').classList.remove('active');
+                try {
+                    const userCredential = await auth.signInWithEmailAndPassword(pendingAdminUser.email, pendingAdminUser.password);
+                    showToast('Admin login successful!');
+                } catch (error) {
+                    showToast(error.message);
+                }
+            } else {
+                showToast('Invalid OTP. Please try again.');
+            }
+        }
+
+        function resendOtp() {
+            generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            console.log('New OTP:', generatedOtp);
+            showToast('OTP resent to skatoch829@gmail.com');
+        }
+
+        function closeOtpModal() {
+            document.getElementById('otpModal').classList.remove('active');
+            pendingAdminUser = null;
+        }
+
+        async function signInWithGoogle() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            try {
+                const result = await auth.signInWithPopup(provider);
+                const user = result.user;
+                
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (!userDoc.exists) {
+                    await db.collection('users').doc(user.uid).set({
+                        email: user.email,
+                        name: user.displayName || 'User',
+                        role: userRole,
+                        wallet: 0,
+                        approved: userRole === 'user',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+            } catch (error) {
+                showToast(error.message);
+            }
+        }
+
+        function showForgotPassword() {
+            const email = prompt('Enter your email to reset password:');
+            if (email) {
+                auth.sendPasswordResetEmail(email)
+                    .then(() => showToast('Password reset email sent!'))
+                    .catch(err => showToast(err.message));
+            }
+        }
+
+        // ==================== USER DATA ====================
+        async function loadUserData(uid) {
+            try {
+                const doc = await db.collection('users').doc(uid).get();
+                if (!doc.exists) {
+                    showToast('User data not found');
+                    await auth.signOut();
+                    return;
+                }
+
+                currentUser = { ...doc.data(), uid: uid };
+                
+                if (currentUser.role === 'provider' && !currentUser.approved) {
+                    showToast('Account pending admin approval');
+                    await auth.signOut();
+                    return;
+                }
+
+                document.getElementById('authScreen').style.display = 'none';
+                document.getElementById('mainApp').style.display = 'block';
+                document.getElementById('loadingScreen').style.display = 'none';
+                
+                updateUI();
+                
+                if (currentUser.role === 'admin') {
+                    document.getElementById('bottomNav').style.display = 'none';
+                    document.getElementById('emergencyBtn').style.display = 'none';
+                    showScreen('admin');
+                    loadAdminData();
+                } else if (currentUser.role === 'provider') {
+                    document.getElementById('bottomNav').style.display = 'none';
+                    document.getElementById('emergencyBtn').style.display = 'none';
+                    showScreen('provider');
+                    loadProviderData();
+                } else {
+                    showScreen('home');
+                    getLocation();
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message);
+                document.getElementById('loadingScreen').style.display = 'none';
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('userNameDisplay').textContent = currentUser.name || 'User';
+            document.getElementById('userAvatar').textContent = (currentUser.name || 'U').charAt(0).toUpperCase();
+            
+            document.getElementById('profileName').textContent = currentUser.name || 'User';
+            document.getElementById('profileEmail').textContent = currentUser.email;
+            document.getElementById('profileRole').textContent = (currentUser.role || 'User').toUpperCase();
+            document.getElementById('profileAvatar').textContent = (currentUser.name || 'U').charAt(0).toUpperCase();
+            
+            const phoneDisplay = document.getElementById('profilePhoneDisplay');
+            const addressDisplay = document.getElementById('profileAddressDisplay');
+            
+            if (currentUser.phone) {
+                phoneDisplay.innerHTML = `<i class="fas fa-phone mr-2 gold-text"></i>${currentUser.phone}`;
+                phoneDisplay.className = 'text-gray-300 mb-2';
+            } else {
+                phoneDisplay.innerHTML = `<i class="fas fa-phone mr-2"></i>Not set`;
+                phoneDisplay.className = 'text-gray-500 mb-2';
+            }
+            
+            if (currentUser.address) {
+                addressDisplay.innerHTML = `<i class="fas fa-map-marker-alt mr-2 gold-text"></i>${currentUser.address}`;
+                addressDisplay.className = 'text-gray-300 mb-3';
+            } else {
+                addressDisplay.innerHTML = `<i class="fas fa-map-marker-alt mr-2"></i>Not set`;
+                addressDisplay.className = 'text-gray-500 mb-3';
+            }
+            
+            document.getElementById('editName').value = currentUser.name || '';
+            document.getElementById('editPhone').value = currentUser.phone || '';
+            document.getElementById('editAddress').value = currentUser.address || '';
+        }
+
+        // ==================== EDIT PROFILE ====================
+        function toggleEditProfile() {
+            isEditMode = !isEditMode;
+            document.getElementById('profileViewMode').style.display = isEditMode ? 'none' : 'block';
+            document.getElementById('profileEditMode').style.display = isEditMode ? 'block' : 'none';
+        }
+
+        async function saveProfile() {
+            const name = document.getElementById('editName').value.trim();
+            const phone = document.getElementById('editPhone').value.trim();
+            const address = document.getElementById('editAddress').value.trim();
+            
+            if (!name) {
+                showToast('Name is required');
+                return;
+            }
+            
+            try {
+                await db.collection('users').doc(currentUser.uid).update({
+                    name: name,
+                    phone: phone,
+                    address: address,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                currentUser.name = name;
+                currentUser.phone = phone;
+                currentUser.address = address;
+                
+                updateUI();
+                toggleEditProfile();
+                showToast('Profile updated successfully!');
+            } catch (error) {
+                showToast('Error updating profile: ' + error.message);
+            }
+        }
+
+        // ==================== LOCATION ====================
+        function getLocation() {
+            if (!navigator.geolocation) {
+                document.getElementById('locationText').textContent = 'Geolocation not supported';
+                return;
+            }
+            
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    document.getElementById('locationText').textContent = 'Location detected';
+                    document.getElementById('locationPermissionBtn').style.display = 'none';
+                    
+                    if (currentUser) {
+                        db.collection('users').doc(currentUser.uid).update({
+                            location: userLocation,
+                            locationUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                },
+                (err) => {
+                    document.getElementById('locationText').textContent = 'Location access denied';
+                    document.getElementById('locationPermissionBtn').style.display = 'block';
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+            );
+        }
+
+        function requestLocationPermission() {
+            getLocation();
+        }
+
+        function updateLocation() {
+            document.getElementById('locationMenuText').textContent = 'Updating...';
+            getLocation();
+            setTimeout(() => {
+                document.getElementById('locationMenuText').textContent = 'Tap to refresh location';
+                showToast('Location updated!');
+            }, 2000);
+        }
+
+        // ==================== NAVIGATION ====================
+        function showScreen(screen) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            
+            const screenMap = {
+                'home': 'homeScreen',
+                'bookings': 'bookingsScreen',
+                'wallet': 'walletScreen',
+                'profile': 'profileScreen',
+                'admin': 'adminScreen',
+                'provider': 'providerScreen',
+                'addMoney': 'addMoneyScreen',
+                'withdrawal': 'withdrawalScreen',
+                'chat': 'chatScreen'
+            };
+            
+            const target = document.getElementById(screenMap[screen]);
+            if (target) target.classList.add('active');
+            
+            const navIndex = ['home', 'bookings', 'wallet', 'profile'].indexOf(screen);
+            if (navIndex >= 0 && document.getElementById('bottomNav').style.display !== 'none') {
+                document.querySelectorAll('.nav-item')[navIndex].classList.add('active');
+            }
+            
+            if (screen === 'bookings') loadBookings();
+            if (screen === 'wallet') loadWallet();
+            if (screen === 'admin') loadAdminData();
+            if (screen === 'provider') loadProviderData();
+        }
+
+        // ==================== BOOKING FUNCTIONS ====================
+        function openBooking(serviceId, name, price, category) {
+            selectedService = { id: serviceId, name: name, price: price, category: category };
+            document.getElementById('modalServiceName').textContent = name;
+            document.getElementById('modalPrice').textContent = price;
+            document.getElementById('bookingModal').classList.add('active');
+            
+            setTimeout(() => {
+                initMap();
+            }, 300);
+        }
+
+        function initMap() {
+            if (!map) {
+                map = L.map('map').setView([userLocation.lat, userLocation.lng], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap'
+                }).addTo(map);
+            }
+            
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    map.setView([userLocation.lat, userLocation.lng], 15);
+                    L.marker([userLocation.lat, userLocation.lng]).addTo(map)
+                        .bindPopup('Your Location').openPopup();
                 });
             }
         }
-    } catch(err) {
-        alert(err.message);
-    }
-}
 
-auth.onAuthStateChanged(async (user) => {
-    if(user) {
-        currentUser = user;
-        const doc = await db.collection('users').doc(user.uid).get();
-        if(doc.exists) {
-            userRole = doc.data().role;
-            showApp();
+        async function submitBooking() {
+            const dateTime = document.getElementById('bookingDateTime').value;
+            const desc = document.getElementById('bookingDesc').value;
+            const btn = document.getElementById('submitBookingBtn');
+            
+            if (!dateTime) {
+                showToast('Please select date and time');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+
+            try {
+                const booking = {
+                    customerId: currentUser.uid,
+                    customerName: currentUser.name,
+                    customerEmail: currentUser.email,
+                    customerPhone: currentUser.phone || '',
+                    service: selectedService.id,
+                    serviceName: selectedService.name,
+                    category: selectedService.category,
+                    price: selectedService.price,
+                    scheduledTime: new Date(dateTime),
+                    description: desc,
+                    location: userLocation,
+                    address: currentUser.address || '',
+                    status: 'pending',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                await db.collection('bookings').add(booking);
+                
+                closeModal();
+                showToast('Booking created successfully!');
+                loadBookings();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Confirm Booking';
+            }
         }
-    } else {
-        showAuth();
-    }
-});
 
-function showAuth() {
-    document.getElementById('authScreen').classList.remove('hide');
-    document.getElementById('customerApp').classList.add('hide');
-    document.getElementById('providerApp').classList.add('hide');
-    document.getElementById('adminApp').classList.add('hide');
-}
+        function closeModal() {
+            document.getElementById('bookingModal').classList.remove('active');
+            document.getElementById('submitBookingBtn').disabled = false;
+            document.getElementById('submitBookingBtn').innerHTML = '<i class="fas fa-check-circle mr-2"></i>Confirm Booking';
+        }
 
-function showApp() {
-    document.getElementById('authScreen').classList.add('hide');
-    if(userRole === 'customer') {
-        document.getElementById('customerApp').classList.remove('hide');
-        loadCustomerData();
-    } else if(userRole === 'provider') {
-        document.getElementById('providerApp').classList.remove('hide');
-        loadProviderData();
-    } else if(userRole === 'admin') {
-        document.getElementById('adminApp').classList.remove('hide');
-        loadAdminData();
-    }
-}
+        function showEmergency() {
+            document.getElementById('emergencyModal').classList.add('active');
+        }
 
-function logout() { auth.signOut(); }
+        function closeEmergency() {
+            document.getElementById('emergencyModal').classList.remove('active');
+        }
 
-// Customer Functions
-async function loadCustomerData() {
-    const doc = await db.collection('users').doc(currentUser.uid).get();
-    const data = doc.data();
-    document.getElementById('customerAvatar').textContent = data.name ? data.name[0].toUpperCase() : 'U';
-    document.getElementById('profileName').textContent = data.name;
-    document.getElementById('profileEmail').textContent = data.email;
-    document.getElementById('walletBalance').textContent = '₹' + (data.wallet || 0);
-    loadBookings();
-    getLocation();
-}
+        function bookEmergency(service) {
+            closeEmergency();
+            const names = {
+                'em-electrician': 'Emergency Electrician',
+                'em-plumber': 'Emergency Plumber',
+                'em-taxi': 'Emergency Taxi',
+                'em-ambulance': 'Emergency Ambulance'
+            };
+            openBooking(service, names[service], '₹500+', 'emergency');
+        }
 
-function getLocation() {
-    if(navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-            const lat = pos.coords.latitude.toFixed(4);
-            const lng = pos.coords.longitude.toFixed(4);
-            document.getElementById('customerLocation').textContent = `📍 ${lat}, ${lng}`;
-            db.collection('users').doc(currentUser.uid).update({location: {lat, lng}});
-        });
-    }
-}
+        // ==================== BOOKINGS & WALLET ====================
+        async function loadBookings() {
+            try {
+                const snapshot = await db.collection('bookings')
+                    .where('customerId', '==', currentUser.uid)
+                    .orderBy('createdAt', 'desc')
+                    .get();
 
-function navigate(screen) {
-    ['customerHome', 'walletScreen', 'profileScreen'].forEach(s => document.getElementById(s).classList.add('hide'));
-    document.getElementById(screen).classList.remove('hide');
-}
+                const container = document.getElementById('allBookings');
+                const recentContainer = document.getElementById('recentBookings');
+                
+                if (snapshot.empty) {
+                    const emptyHtml = '<p class="text-gray-500 text-center py-4">No bookings yet</p>';
+                    container.innerHTML = emptyHtml;
+                    recentContainer.innerHTML = emptyHtml;
+                    return;
+                }
 
-function showScreen(screen) {
-    ['customerHome', 'providersList', 'providerProfile', 'bookingScreen', 'walletScreen', 'profileScreen'].forEach(s => {
-        document.getElementById(s).classList.add('hide');
-    });
-    document.getElementById(screen).classList.remove('hide');
-}
-
-async function showProviders(service) {
-    showScreen('providersList');
-    document.getElementById('serviceTitle').textContent = service.charAt(0).toUpperCase() + service.slice(1) + 's';
-    
-    const snap = await db.collection('providers').where('approved', '==', true).where('availability', '==', true).get();
-    const container = document.getElementById('providersContainer');
-    container.innerHTML = '';
-    
-    snap.forEach(doc => {
-        const p = doc.data();
-        if(p.services && p.services.includes(service)) {
-            container.innerHTML += `
-                <div onclick="showProfile('${doc.id}', '${service}')" class="bg-white rounded-xl p-4 shadow-sm cursor-pointer">
-                    <div class="flex items-center gap-3">
-                        <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center text-2xl">👤</div>
-                        <div class="flex-1">
-                            <h4 class="font-bold">${p.name}</h4>
-                            <div class="text-yellow-500 text-sm"><i class="fas fa-star"></i> ${p.rating || 0}</div>
+                let html = '';
+                let recentHtml = '';
+                let count = 0;
+                
+                snapshot.forEach(doc => {
+                    const b = doc.data();
+                    const statusClass = 'badge-' + (b.status || 'pending');
+                    const date = b.scheduledTime?.toDate().toLocaleString() || 'Pending';
+                    
+                    const card = `
+                        <div class="card mb-3">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="font-bold text-white">${b.serviceName}</h4>
+                                <span class="badge ${statusClass}">${(b.status || 'PENDING').toUpperCase()}</span>
+                            </div>
+                            <p class="text-sm text-gray-400"><i class="far fa-clock mr-2 gold-text"></i>${date}</p>
+                            ${b.status === 'accepted' ? `
+                                <button onclick="openChat('${doc.id}', '${b.providerId || ''}')" class="btn-primary btn-gold mt-3 text-sm py-2">
+                                    <i class="fas fa-comment mr-2"></i>Chat with Provider
+                                </button>
+                            ` : ''}
                         </div>
-                        <div class="text-right">
-                            <p class="font-bold text-purple-600">₹${p.price || 200}/hr</p>
-                            <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Available</span>
+                    `;
+                    
+                    html += card;
+                    if (count < 3) recentHtml += card;
+                    count++;
+                });
+                
+                container.innerHTML = html;
+                recentContainer.innerHTML = recentHtml;
+            } catch (error) {
+                console.error('Error loading bookings:', error);
+            }
+        }
+
+        async function loadWallet() {
+            try {
+                const doc = await db.collection('users').doc(currentUser.uid).get();
+                const wallet = doc.data()?.wallet || 0;
+                document.getElementById('walletBalance').textContent = '₹' + wallet;
+            } catch (error) {
+                console.error('Error loading wallet:', error);
+            }
+        }
+
+        // ==================== ADD MONEY ====================
+        function showAddMoney() {
+            showScreen('addMoney');
+            document.getElementById('addAmount').value = '500';
+            document.getElementById('qrAmount').textContent = '500';
+        }
+
+        function setAmount(amount) {
+            document.getElementById('addAmount').value = amount;
+            document.getElementById('qrAmount').textContent = amount;
+        }
+
+        document.getElementById('addAmount')?.addEventListener('input', function() {
+            document.getElementById('qrAmount').textContent = this.value || '0';
+        });
+
+        function copyUpiId() {
+            const upiId = document.getElementById('upiIdDisplay').textContent;
+            navigator.clipboard.writeText(upiId).then(() => {
+                showToast('UPI ID copied!');
+            });
+        }
+
+        async function submitTopUpRequest() {
+            const amount = parseInt(document.getElementById('addAmount').value);
+            const utrNumber = document.getElementById('utrNumber').value.trim();
+            
+            if (!amount || amount < 100) {
+                showToast('Minimum top-up amount is ₹100');
+                return;
+            }
+            
+            if (!utrNumber) {
+                showToast('Please enter UTR number after payment');
+                return;
+            }
+            
+            try {
+                await db.collection('topupRequests').add({
+                    userId: currentUser.uid,
+                    userName: currentUser.name || 'User',
+                    userEmail: currentUser.email,
+                    amount: amount,
+                    utrNumber: utrNumber,
+                    upiId: 'notabhiraj@fam',
+                    status: 'pending',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                showToast('Top-up request submitted! Admin will verify.');
+                showScreen('wallet');
+                document.getElementById('utrNumber').value = '';
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
+
+        function viewHistory() {
+            showToast('Transaction history - Coming soon');
+        }
+
+        // ==================== ADMIN FUNCTIONS ====================
+        async function loadAdminData() {
+            try {
+                const usersSnap = await db.collection('users').get();
+                let users = 0, providers = 0, pending = 0;
+                
+                usersSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.role === 'user') users++;
+                    if (data.role === 'provider') {
+                        if (data.approved) providers++;
+                        else pending++;
+                    }
+                });
+                
+                document.getElementById('adminUsers').textContent = users;
+                document.getElementById('adminProviders').textContent = providers;
+                document.getElementById('adminPending').textContent = pending;
+                
+                const bookingsSnap = await db.collection('bookings').get();
+                document.getElementById('adminBookings').textContent = bookingsSnap.size;
+                
+                // Load pending providers
+                const pendingSnap = await db.collection('providers').where('approved', '==', false).get();
+                const pendingContainer = document.getElementById('pendingProvidersList');
+                
+                if (pendingSnap.empty) {
+                    pendingContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No pending approvals</p>';
+                } else {
+                    let html = '';
+                    pendingSnap.forEach(doc => {
+                        const p = doc.data();
+                        html += `
+                            <div class="flex justify-between items-center py-3 border-b border-white/10">
+                                <div>
+                                    <p class="text-white font-medium">${p.name}</p>
+                                    <p class="text-xs text-gray-400">${p.email}</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="approveProvider('${doc.id}')" class="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold">Approve</button>
+                                    <button onclick="rejectProvider('${doc.id}')" class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold">Reject</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    pendingContainer.innerHTML = html;
+                }
+                
+                // Load wallet requests
+                loadWalletRequests();
+            } catch (error) {
+                console.error('Error loading admin data:', error);
+            }
+        }
+
+        async function loadWalletRequests() {
+            const topupsSnap = await db.collection('topupRequests').where('status', '==', 'pending').get();
+            const topupsContainer = document.getElementById('pendingTopupsList');
+            
+            if (topupsSnap.empty) {
+                topupsContainer.innerHTML = '<p class="text-gray-500 text-center py-2">No pending top-ups</p>';
+            } else {
+                let html = '';
+                topupsSnap.forEach(doc => {
+                    const req = doc.data();
+                    html += `
+                        <div class="flex justify-between items-center py-2 border-b border-white/10">
+                            <div>
+                                <p class="text-white text-sm">${req.userName}</p>
+                                <p class="text-xs text-gray-400">₹${req.amount} | UTR: ${req.utrNumber}</p>
+                            </div>
+                            <button onclick="approveTopup('${doc.id}', '${req.userId}', ${req.amount})" class="px-3 py-1 rounded-lg bg-green-600 text-white text-xs">Approve</button>
+                        </div>
+                    `;
+                });
+                topupsContainer.innerHTML = html;
+            }
+            
+            const withdrawalsSnap = await db.collection('withdrawalRequests').where('status', '==', 'pending').get();
+            const withdrawalsContainer = document.getElementById('pendingWithdrawalsList');
+            
+            if (withdrawalsSnap.empty) {
+                withdrawalsContainer.innerHTML = '<p class="text-gray-500 text-center py-2">No pending withdrawals</p>';
+            } else {
+                let html = '';
+                withdrawalsSnap.forEach(doc => {
+                    const req = doc.data();
+                    html += `
+                        <div class="flex justify-between items-center py-2 border-b border-white/10">
+                            <div>
+                                <p class="text-white text-sm">${req.userName}</p>
+                                <p class="text-xs text-gray-400">₹${req.amount} | ${req.upiId}</p>
+                            </div>
+                            <button onclick="approveWithdrawal('${doc.id}', '${req.userId}', ${req.amount})" class="px-3 py-1 rounded-lg bg-blue-600 text-white text-xs">Mark Paid</button>
+                        </div>
+                    `;
+                });
+                withdrawalsContainer.innerHTML = html;
+            }
+        }
+
+        async function approveProvider(uid) {
+            try {
+                await db.collection('providers').doc(uid).update({ approved: true });
+                await db.collection('users').doc(uid).update({ approved: true });
+                showToast('Provider approved');
+                loadAdminData();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
+
+        async function rejectProvider(uid) {
+            if (!confirm('Are you sure?')) return;
+            try {
+                await db.collection('providers').doc(uid).delete();
+                showToast('Provider rejected');
+                loadAdminData();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
+
+        async function approveTopup(requestId, userId, amount) {
+            try {
+                await db.collection('users').doc(userId).update({
+                    wallet: firebase.firestore.FieldValue.increment(amount)
+                });
+                await db.collection('topupRequests').doc(requestId).update({
+                    status: 'completed',
+                    processedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                await db.collection('transactions').add({
+                    userId: userId,
+                    type: 'credit',
+                    amount: amount,
+                    description: 'Wallet top-up',
+                    status: 'completed',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                showToast('Top-up approved!');
+                loadWalletRequests();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
+
+        async function approveWithdrawal(requestId, userId, amount) {
+            try {
+                await db.collection('providers').doc(userId).update({
+                    wallet: firebase.firestore.FieldValue.increment(-amount)
+                });
+                await db.collection('withdrawalRequests').doc(requestId).update({
+                    status: 'completed',
+                    processedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                await db.collection('transactions').add({
+                    userId: userId,
+                    type: 'debit',
+                    amount: amount,
+                    description: 'Withdrawal to UPI',
+                    status: 'completed',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                showToast('Withdrawal marked as paid!');
+                loadWalletRequests();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
+
+        async function saveCommissionSettings() {
+            const home = parseInt(document.getElementById('commHome').value);
+            const other = parseInt(document.getElementById('commOther').value);
+            
+            try {
+                await db.collection('admin').doc('settings').set({
+                    commissionHome: home,
+                    commissionTaxi: home,
+                    commissionOther: other
+                }, { merge: true });
+                showToast('Commission settings saved!');
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
+
+        async function savePaymentSettings() {
+            const upiId = document.getElementById('adminUpiId').value;
+            const minTopup = parseInt(document.getElementById('minTopup').value);
+            const maxTopup = parseInt(document.getElementById('maxTopup').value);
+            const minWithdrawal = parseInt(document.getElementById('minWithdrawal').value);
+            
+            try {
+                await db.collection('admin').doc('settings').set({
+                    upiId: upiId,
+                    minTopUp: minTopup,
+                    maxTopUp: maxTopup,
+                    minWithdrawal: minWithdrawal
+                }, { merge: true });
+                
+                document.getElementById('upiIdDisplay').textContent = upiId;
+                showToast('Payment settings saved!');
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
+
+        async function addNewAdmin() {
+            const email = document.getElementById('newAdminEmail').value.trim();
+            const password = document.getElementById('newAdminPassword').value;
+            
+            if (!email || !password) {
+                showToast('Please enter email and password');
+                return;
+            }
+            
+            try {
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                await db.collection('users').doc(userCredential.user.uid).set({
+                    email: email,
+                    role: 'admin',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                adminEmails.push(email);
+                showToast('New admin added!');
+                document.getElementById('newAdminEmail').value = '';
+                document.getElementById('newAdminPassword').value = '';
+            } catch (error) {
+                showToast(error.message);
+            }
+        }
+
+        // ==================== PROVIDER FUNCTIONS ====================
+        async function loadProviderData() {
+            try {
+                const doc = await db.collection('providers').doc(currentUser.uid).get();
+                const data = doc.data();
+                
+                if (data) {
+                    document.getElementById('providerWallet').textContent = '₹' + (data.wallet || 0);
+                    document.getElementById('withdrawalBalance').textContent = '₹' + (data.wallet || 0);
+                    document.getElementById('providerJobsCompleted').textContent = data.jobsCompleted || 0;
+                    document.getElementById('providerRating').textContent = data.rating || '0.0';
+                    document.getElementById('providerEarnings').textContent = '₹' + (data.earnings || 0);
+                    
+                    const toggle = document.getElementById('availabilityToggle');
+                    if (data.availability) {
+                        toggle.classList.add('active');
+                        document.getElementById('providerStatus').textContent = '● Available';
+                        document.getElementById('providerStatus').className = 'text-sm text-green-400';
+                    } else {
+                        toggle.classList.remove('active');
+                        document.getElementById('providerStatus').textContent = '● Offline';
+                        document.getElementById('providerStatus').className = 'text-sm text-gray-400';
+                    }
+                }
+                
+                loadProviderRequests();
+                loadProviderActiveJobs();
+            } catch (error) {
+                console.error('Error loading provider data:', error);
+            }
+        }
+
+        async function toggleAvailability() {
+            const toggle = document.getElementById('availabilityToggle');
+            const available = !toggle.classList.contains('active');
+            
+            try {
+                await db.collection('providers').doc(currentUser.uid).update({ availability: available });
+                await db.collection('users').doc(currentUser.uid).update({ availability: available });
+                
+                if (available) {
+                    toggle.classList.add('active');
+                    document.getElementById('providerStatus').textContent = '● Available';
+                    document.getElementById('providerStatus').className = 'text-sm text-green-400';
+                } else {
+                    toggle.classList.remove('active');
+                    document.getElementById('providerStatus').textContent = '● Offline';
+                    document.getElementById('providerStatus').className = 'text-sm text-gray-400';
+                }
+                showToast(available ? 'You are now available' : 'You are now offline');
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
+
+        async function loadProviderRequests() {
+            const snapshot = await db.collection('bookings')
+                .where('status', '==', 'pending')
+                .get();
+            
+            const container = document.getElementById('providerRequests');
+            
+            if (snapshot.empty) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">No new requests</p>';
+                return;
+            }
+            
+            let html = '';
+            snapshot.forEach(doc => {
+                const b = doc.data();
+                html += `
+                    <div class="card mb-3">
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-bold text-white">${b.serviceName}</h4>
+                            <span class="badge badge-pending">PENDING</span>
+                        </div>
+                        <p class="text-sm text-gray-400">${b.customerName}</p>
+                        <p class="text-sm text-gray-400">${b.address || 'No address'}</p>
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="acceptRequest('${doc.id}')" class="flex-1 py-2 rounded-lg bg-green-600 text-white text-sm">Accept</button>
+                            <button onclick="declineRequest('${doc.id}')" class="flex-1 py-2 rounded-lg bg-red-600 text-white text-sm">Decline</button>
                         </div>
                     </div>
-                </div>
-            `;
+                `;
+            });
+            container.innerHTML = html;
         }
-    });
-}
 
-let currentProvider = null;
-async function showProfile(id, service) {
-    currentProvider = {id, service};
-    showScreen('providerProfile');
-    const doc = await db.collection('providers').doc(id).get();
-    const p = doc.data();
-    
-    document.getElementById('profileContent').innerHTML = `
-        <div class="text-center mb-6">
-            <div class="w-24 h-24 bg-purple-100 rounded-full mx-auto mb-3 flex items-center justify-center text-4xl">👤</div>
-            <h3 class="font-bold text-xl">${p.name}</h3>
-            <div class="text-yellow-500 mb-2"><i class="fas fa-star"></i> ${p.rating || 0}</div>
-        </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <h4 class="font-bold mb-2">Services</h4>
-            <div class="flex flex-wrap gap-2">
-                ${p.services.map(s => `<span class="bg-gray-100 px-3 py-1 rounded-full text-sm">${s}</span>`).join('')}
-            </div>
-        </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <h4 class="font-bold mb-2">Price</h4>
-            <p class="text-2xl font-bold text-purple-600">₹${p.price || 200}<span class="text-sm text-gray-500">/hour</span></p>
-        </div>
-        <button onclick="showBooking()" class="w-full gold-btn text-white py-4 rounded-xl font-bold text-lg">Book Now</button>
-    `;
-}
-
-function showBooking() {
-    showScreen('bookingScreen');
-    document.getElementById('bookingContent').innerHTML = `
-        <div class="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <h4 class="font-bold mb-3">Schedule</h4>
-            <input type="date" id="bookDate" class="w-full px-3 py-2 border rounded-lg mb-3" min="${new Date().toISOString().split('T')[0]}">
-            <input type="time" id="bookTime" class="w-full px-3 py-2 border rounded-lg">
-        </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <h4 class="font-bold mb-3">Description</h4>
-            <textarea id="bookDesc" rows="3" placeholder="Describe your issue..." class="w-full px-3 py-2 border rounded-lg"></textarea>
-        </div>
-        <button onclick="confirmBooking()" class="w-full gold-btn text-white py-4 rounded-xl font-bold">Confirm Booking</button>
-    `;
-}
-
-async function confirmBooking() {
-    const userDoc = await db.collection('users').doc(currentUser.uid).get();
-    const wallet = userDoc.data().wallet || 0;
-    
-    if(wallet < 100) {
-        alert('Low balance. Add money first.');
-        navigate('walletScreen');
-        return;
-    }
-    
-    await db.collection('bookings').add({
-        customerId: currentUser.uid,
-        customerName: userDoc.data().name,
-        providerId: currentProvider.id,
-        service: currentProvider.service,
-        status: 'pending',
-        date: document.getElementById('bookDate').value,
-        time: document.getElementById('bookTime').value,
-        description: document.getElementById('bookDesc').value,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    
-    alert('Booking sent!');
-    navigate('customerHome');
-}
-
-async function loadBookings() {
-    const snap = await db.collection('bookings').where('customerId', '==', currentUser.uid).orderBy('createdAt', 'desc').limit(5).get();
-    const container = document.getElementById('customerBookings');
-    container.innerHTML = '';
-    
-    snap.forEach(doc => {
-        const b = doc.data();
-        container.innerHTML += `
-            <div class="bg-white rounded-xl p-4 shadow-sm">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <h4 class="font-bold capitalize">${b.service}</h4>
-                        <p class="text-sm text-gray-500">${b.providerName || 'Provider'}</p>
+        async function loadProviderActiveJobs() {
+            const snapshot = await db.collection('bookings')
+                .where('providerId', '==', currentUser.uid)
+                .where('status', 'in', ['accepted', 'started'])
+                .get();
+            
+            const container = document.getElementById('providerActiveJobs');
+            
+            if (snapshot.empty) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">No active jobs</p>';
+                return;
+            }
+            
+            let html = '';
+            snapshot.forEach(doc => {
+                const b = doc.data();
+                html += `
+                    <div class="card mb-3">
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-bold text-white">${b.serviceName}</h4>
+                            <span class="badge badge-accepted">${b.status.toUpperCase()}</span>
+                        </div>
+                        <p class="text-sm text-gray-400">${b.customerName}</p>
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="startJob('${doc.id}')" class="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm">Start</button>
+                            <button onclick="completeJob('${doc.id}')" class="flex-1 py-2 rounded-lg bg-green-600 text-white text-sm">Complete</button>
+                            <button onclick="openChat('${doc.id}', '${b.customerId}')" class="px-3 py-2 rounded-lg bg-white/10 text-white text-sm">
+                                <i class="fas fa-comment"></i>
+                            </button>
+                        </div>
                     </div>
-                    <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full capitalize">${b.status}</span>
-                </div>
-            </div>
-        `;
-    });
-}
+                `;
+            });
+            container.innerHTML = html;
+        }
 
-function showAddMoney() {
-    document.getElementById('addMoneySection')?.classList.remove('hide');
-}
+        async function acceptRequest(bookingId) {
+            try {
+                await db.collection('bookings').doc(bookingId).update({
+                    providerId: currentUser.uid,
+                    status: 'accepted'
+                });
+                showToast('Request accepted!');
+                loadProviderRequests();
+                loadProviderActiveJobs();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
 
-async function requestTopUp() {
-    const amount = document.getElementById('topupAmount').value;
-    const utr = document.getElementById('utrNumber').value;
-    
-    if(!amount || amount < 100) {
-        alert('Minimum ₹100');
-        return;
-    }
-    
-    await db.collection('transactions').add({
-        userId: currentUser.uid,
-        type: 'topup_request',
-        amount: parseInt(amount),
-        utr: utr,
-        status: 'pending',
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    
-    alert('Top-up request sent. Admin will verify shortly.');
-    document.getElementById('topupAmount').value = '';
-    document.getElementById('utrNumber').value = '';
-}
+        async function declineRequest(bookingId) {
+            try {
+                await db.collection('bookings').doc(bookingId).update({ status: 'declined' });
+                showToast('Request declined');
+                loadProviderRequests();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
 
-// Provider Functions
-async function loadProviderData() {
-    const doc = await db.collection('providers').doc(currentUser.uid).get();
-    const data = doc.data();
-    document.getElementById('availabilityToggle').checked = data.availability || false;
-    document.getElementById('providerEarnings').textContent = '₹' + (data.earnings || 0);
-    
-    // Load requests
-    const requests = await db.collection('bookings').where('providerId', '==', currentUser.uid).where('status', '==', 'pending').get();
-    const reqContainer = document.getElementById('providerRequests');
-    reqContainer.innerHTML = '';
-    
-    requests.forEach(doc => {
-        const b = doc.data();
-        reqContainer.innerHTML += `
-            <div class="bg-white rounded-xl p-4 shadow-sm">
-                <h4 class="font-bold capitalize">${b.service}</h4>
-                <p class="text-sm text-gray-500">${b.customerName}</p>
-                <p class="text-sm">${b.date} ${b.time}</p>
-                <div class="flex gap-2 mt-2">
-                    <button onclick="acceptBooking('${doc.id}')" class="flex-1 bg-green-500 text-white py-2 rounded-lg">Accept</button>
-                    <button onclick="declineBooking('${doc.id}')" class="flex-1 bg-red-500 text-white py-2 rounded-lg">Decline</button>
-                </div>
-            </div>
-        `;
-    });
-}
+        async function startJob(bookingId) {
+            try {
+                await db.collection('bookings').doc(bookingId).update({ status: 'started' });
+                showToast('Job started!');
+                loadProviderActiveJobs();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
 
-async function toggleAvailability() {
-    const available = document.getElementById('availabilityToggle').checked;
-    await db.collection('providers').doc(currentUser.uid).update({availability: available});
-}
+        async function completeJob(bookingId) {
+            const price = prompt('Enter final price:');
+            if (!price) return;
+            
+            try {
+                const commission = Math.round(parseInt(price) * 0.1);
+                const providerEarnings = parseInt(price) - commission;
+                
+                await db.collection('bookings').doc(bookingId).update({
+                    status: 'completed',
+                    finalPrice: parseInt(price),
+                    commission: commission,
+                    providerEarnings: providerEarnings
+                });
+                
+                await db.collection('providers').doc(currentUser.uid).update({
+                    wallet: firebase.firestore.FieldValue.increment(providerEarnings),
+                    earnings: firebase.firestore.FieldValue.increment(providerEarnings),
+                    jobsCompleted: firebase.firestore.FieldValue.increment(1)
+                });
+                
+                showToast('Job completed! ₹' + providerEarnings + ' added to wallet');
+                loadProviderData();
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
 
-async function acceptBooking(id) {
-    await db.collection('bookings').doc(id).update({status: 'accepted'});
-    loadProviderData();
-}
+        // ==================== WITHDRAWAL ====================
+        function showWithdrawalScreen() {
+            showScreen('withdrawal');
+        }
 
-async function declineBooking(id) {
-    await db.collection('bookings').doc(id).update({status: 'declined'});
-    loadProviderData();
-}
+        async function submitWithdrawalRequest() {
+            const amount = parseInt(document.getElementById('withdrawalAmount').value);
+            const upiId = document.getElementById('withdrawalUpi').value.trim();
+            
+            if (!amount || amount < 500) {
+                showToast('Minimum withdrawal is ₹500');
+                return;
+            }
+            
+            if (!upiId) {
+                showToast('Please enter your UPI ID');
+                return;
+            }
+            
+            try {
+                await db.collection('withdrawalRequests').add({
+                    userId: currentUser.uid,
+                    userName: currentUser.name || 'Provider',
+                    amount: amount,
+                    upiId: upiId,
+                    status: 'pending',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                showToast('Withdrawal request submitted!');
+                showScreen('provider');
+                document.getElementById('withdrawalAmount').value = '';
+                document.getElementById('withdrawalUpi').value = '';
+            } catch (error) {
+                showToast('Error: ' + error.message);
+            }
+        }
 
-function showWithdrawal() {
-    const amount = prompt('Enter amount to withdraw:');
-    const upi = prompt('Enter your UPI ID:');
-    if(amount && upi) {
-        db.collection('transactions').add({
-            userId: currentUser.uid,
-            type: 'withdrawal_request',
-            amount: parseInt(amount),
-            upiId: upi,
-            status: 'pending',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        alert('Withdrawal request sent to admin');
-    }
-}
+        // ==================== CHAT ====================
+        async function openChat(bookingId, partnerId) {
+            currentChatId = bookingId;
+            showScreen('chat');
+            
+            const bookingDoc = await db.collection('bookings').doc(bookingId).get();
+            const booking = bookingDoc.data();
+            
+            if (currentUser.role === 'provider') {
+                document.getElementById('chatPartnerName').textContent = booking.customerName;
+                document.getElementById('chatPartnerService').textContent = booking.serviceName;
+            } else {
+                const providerDoc = await db.collection('providers').doc(partnerId).get();
+                const provider = providerDoc.data();
+                document.getElementById('chatPartnerName').textContent = provider?.name || 'Provider';
+                document.getElementById('chatPartnerService').textContent = booking.serviceName;
+            }
+            
+            loadChatMessages();
+        }
 
-// Admin Functions
-async function loadAdminData() {
-    const users = await db.collection('users').get();
-    const providers = await db.collection('providers').get();
-    const bookings = await db.collection('bookings').get();
-    
-    document.getElementById('statUsers').textContent = users.size;
-    document.getElementById('statProviders').textContent = providers.size;
-    document.getElementById('statBookings').textContent = bookings.size;
-    
-    loadAdmins();
-}
+        function loadChatMessages() {
+            if (chatUnsubscribe) chatUnsubscribe();
+            
+            chatUnsubscribe = db.collection('chats').doc(currentChatId)
+                .collection('messages')
+                .orderBy('timestamp', 'asc')
+                .onSnapshot(snapshot => {
+                    const container = document.getElementById('chatMessages');
+                    
+                    if (snapshot.empty) {
+                        container.innerHTML = '<p class="text-gray-500 text-center py-4">No messages yet</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = snapshot.docs.map(doc => {
+                        const msg = doc.data();
+                        const isSent = msg.senderId === currentUser.uid;
+                        return `
+                            <div class="chat-bubble ${isSent ? 'chat-sent' : 'chat-received'}">
+                                <p>${msg.text}</p>
+                                <p class="text-xs ${isSent ? 'text-black/50' : 'text-gray-500'} mt-1">
+                                    ${msg.timestamp?.toDate().toLocaleTimeString() || ''}
+                                </p>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    container.scrollTop = container.scrollHeight;
+                });
+        }
 
-function showAdminSection(section) {
-    document.querySelectorAll('#adminSections > div').forEach(d => d.classList.add('hide'));
-    document.getElementById(section + 'Section').classList.remove('hide');
-}
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            
+            if (!text || !currentChatId) return;
+            
+            try {
+                await db.collection('chats').doc(currentChatId).collection('messages').add({
+                    text: text,
+                    senderId: currentUser.uid,
+                    senderName: currentUser.name,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                input.value = '';
+            } catch (error) {
+                showToast('Error sending message');
+            }
+        }
 
-async function savePaymentSettings() {
-    const upi = document.getElementById('adminUpiId').value;
-    const qr = document.getElementById('adminQrUrl').value;
-    const minTop = document.getElementById('minTopup').value;
-    const maxTop = document.getElementById('maxTopup').value;
-    
-    await db.collection('admin').doc('settings').set({
-        upiId: upi,
-        qrUrl: qr,
-        minTopup: parseInt(minTop),
-        maxTopup: parseInt(maxTop),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    
-    alert('Settings saved!');
-}
+        function closeChat() {
+            if (chatUnsubscribe) chatUnsubscribe();
+            currentChatId = null;
+            if (currentUser.role === 'provider') {
+                showScreen('provider');
+            } else {
+                showScreen('bookings');
+            }
+        }
 
-async function loadAdmins() {
-    const snap = await db.collection('admins').get();
-    const container = document.getElementById('adminList');
-    container.innerHTML = '';
-    
-    snap.forEach(doc => {
-        container.innerHTML += `
-            <div class="bg-white p-3 rounded-lg flex justify-between items-center">
-                <span>${doc.id}</span>
-                ${doc.id !== ADMIN_EMAIL ? `<button onclick="removeAdmin('${doc.id}')" class="text-red-500"><i class="fas fa-trash"></i></button>` : '<span class="text-xs text-gray-500">Super Admin</span>'}
-            </div>
-        `;
-    });
-}
+        function callPartner() {
+            showToast('Call feature - Phone masked for privacy');
+        }
 
-async function addNewAdmin() {
-    const email = document.getElementById('newAdminEmail').value;
-    if(email) {
-        await db.collection('admins').doc(email).set({
-            addedBy: currentUser.email,
-            addedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        alert('Admin added!');
-        document.getElementById('newAdminEmail').value = '';
-        loadAdmins();
-    }
-}
+        function shareLocationInChat() {
+            showToast('Location shared!');
+        }
 
-function emergency() {
-    alert('Emergency services coming soon!');
-}
-</script>
+        // ==================== UTILITY ====================
+        function setupOfflineDetection() {
+            window.addEventListener('online', () => {
+                document.getElementById('offlineIndicator').classList.remove('show');
+                showToast('Back online!');
+            });
+            
+            window.addEventListener('offline', () => {
+                document.getElementById('offlineIndicator').classList.add('show');
+            });
+        }
 
+        function searchServices(query) {
+            const items = document.querySelectorAll('.service-card');
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(query.toLowerCase()) ? 'flex' : 'none';
+            });
+        }
+
+        function showHelp() {
+            showToast('Support: contact@clickonesolution.com');
+        }
+
+        async function logout() {
+            await auth.signOut();
+            location.reload();
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+    </script>
 </body>
 </html>
