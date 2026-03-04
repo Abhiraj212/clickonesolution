@@ -1,4 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#FFD700">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Click One Solution</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 
+    <style>
+        * { -webkit-tap-highlight-color: transparent; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { overscroll-behavior-y: none; background: #0a0a0a; }
+        .app-container { max-width: 430px; margin: 0 auto; min-height: 100vh; position: relative; background: #0a0a0a; }
+        ::-webkit-scrollbar { display: none; }
+        
+        .screen { display: none; min-height: 100vh; padding-bottom: 80px; animation: fadeIn 0.3s; }
+        .screen.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .gold-gradient { background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF6B00 100%); }
+        .blue-gradient { background: linear-gradient(135deg, #0066FF 0%, #0052cc 100%); }
+        
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 100%; max-width: 430px; background: rgba(26,26,46,0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255,215,0,0.2);
+            display: flex; justify-content: space-around; padding: 8px 0; z-index: 1000;
+        }
+        .nav-item { display: flex; flex-direction: column; align-items: center; padding: 6px 16px; color: #666; cursor: pointer; transition: all 0.3s; }
+        .nav-item.active { color: #FFD700; transform: scale(1.1); }
+        .nav-item i { font-size: 22px; margin-bottom: 2px; }
+        .nav-item span { font-size: 11px; font-weight: 500; }
+        
+        .input-field { 
+            width: 100%; padding: 16px 20px; 
+            background: rgba(255,255,255,0.1); 
+            border: 1px solid rgba(255,215,0,0.3);
+            border-radius: 16px; 
+            font-size: 16px; color: white;
+            transition: all 0.3s;
+        }
+        .input-field:focus { outline: none; border-color: #FFD700; box-shadow: 0 0 20px rgba(255,215,0,0.3); }
+        .input-field::placeholder { color: rgba(255,255,255,0.5); }
+        
+        .btn-primary { 
+            width: 100%; padding: 18px; 
+            background: linear-gradient(135deg, #0066FF, #0052cc);
+            color: white; border: none; border-radius: 16px; 
+            font-size: 18px; font-weight: 700;
+            cursor: pointer; transition: all 0.3s;
+            box-shadow: 0 8px 32px rgba(0,102,255,0.4);
+        }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-gold { 
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            color: #0a0a0a; box-shadow: 0 8px 32px rgba(255,215,0,0.4);
+        }
+        
+        .card { 
+            background: rgba(255,255,255,0.05); 
+            border: 1px solid rgba(255,215,0,0.1);
+            border-radius: 24px; 
+            padding: 24px; margin-bottom: 16px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .service-card {
+            background: rgba(255,255,255,0.08);
+            border-radius: 20px; padding: 20px;
+            border: 1px solid rgba(255,215,0,0.15);
+            transition: all 0.3s; cursor: pointer;
+        }
+        .service-card:hover { transform: translateY(-4px); border-color: rgba(255,215,0,0.4); }
+        
+        .gold-text { color: #FFD700; }
+        
+        .toast { 
+            position: fixed; bottom: 100px; left: 50%; 
+            transform: translateX(-50%) translateY(100px); 
+            background: linear-gradient(135deg, #1a1a2e, #0a0a0a);
+            color: #FFD700; padding: 16px 32px;
+            border-radius: 50px; font-size: 14px; font-weight: 600;
+            border: 1px solid rgba(255,215,0,0.3);
+            z-index: 3000; opacity: 0;
+            transition: all 0.3s;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        
+        .badge {
+            display: inline-block; padding: 6px 16px;
+            border-radius: 50px; font-size: 12px; font-weight: 700;
+        }
+        .badge-pending { background: rgba(255,193,7,0.2); color: #FFC107; }
+        .badge-accepted { background: rgba(33,150,243,0.2); color: #2196F3; }
+        .badge-completed { background: rgba(76,175,80,0.2); color: #4CAF50; }
+        .badge-cancelled { background: rgba(244,67,54,0.2); color: #F44336; }
+        
+        .emergency-btn {
+            position: fixed; bottom: 100px; right: 20px;
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ff4444, #cc0000);
+            color: white; border: none; font-size: 28px;
+            box-shadow: 0 8px 32px rgba(255,68,68,0.5);
+            z-index: 999; animation: pulse 2s infinite;
+            cursor: pointer; display: flex;
+            align-items: center; justify-content: center;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255,68,68,0.6); }
+            50% { box-shadow: 0 0 0 20px rgba(255,68,68,0); }
+        }
+        
+        .modal {
+            display: none; position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000; justify-content: center; align-items: flex-end;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: linear-gradient(180deg, #1a1a2e 0%, #0a0a0a 100%);
+            width: 100%; max-width: 430px;
+            border-radius: 40px 40px 0 0;
+            padding: 32px 24px;
+            border-top: 2px solid rgba(255,215,0,0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .admin-panel { background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 100%); }
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 20px; padding: 20px;
+            border: 1px solid rgba(255,215,0,0.1);
+            text-align: center;
+        }
+        .stat-number { font-size: 36px; font-weight: 800; color: #FFD700; }
+        
+        .loading-screen {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #0a0a0a;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 5000;
+        }
+        .spinner {
+            width: 60px; height: 60px;
+            border: 4px solid rgba(255,215,0,0.2);
+            border-top-color: #FFD700;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .offline-indicator {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: #ff4444; color: white;
+            text-align: center; padding: 8px;
+            font-size: 14px; font-weight: 600;
+            z-index: 9999; transform: translateY(-100%);
+            transition: transform 0.3s;
+        }
+        .offline-indicator.show { transform: translateY(0); }
+        
+        .edit-btn {
+            position: absolute; top: 10px; right: 10px;
+            width: 36px; height: 36px;
+            border-radius: 50%; background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,215,0,0.3);
+            color: #FFD700; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        
+        .location-permission-btn {
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            color: #0a0a0a; padding: 12px 24px;
+            border-radius: 25px; font-weight: 600;
+            border: none; cursor: pointer; margin-top: 10px;
+        }
+        
+        .chat-bubble { max-width: 75%; padding: 12px 16px; border-radius: 16px; margin: 4px 0; }
+        .chat-sent { background: linear-gradient(135deg, #FFD700, #FFA500); color: #0a0a0a; margin-left: auto; border-bottom-right-radius: 4px; }
+        .chat-received { background: rgba(255,255,255,0.1); color: white; border-bottom-left-radius: 4px; border: 1px solid rgba(255,215,0,0.2); }
+        
+        .qr-container { background: white; padding: 20px; border-radius: 20px; text-align: center; }
+        .qr-container img { max-width: 250px; border-radius: 12px; }
+        
+        .toggle-switch { width: 50px; height: 28px; background: #333; border-radius: 14px; position: relative; cursor: pointer; transition: all 0.3s; }
+        .toggle-switch.active { background: #10B981; }
+        .toggle-switch::after { content: ''; position: absolute; width: 24px; height: 24px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: all 0.3s; }
+        .toggle-switch.active::after { left: 24px; }
+        
+        .otp-input { width: 50px; height: 60px; text-align: center; font-size: 24px; font-weight: bold; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,215,0,0.3); border-radius: 12px; color: white; }
+        .otp-input:focus { outline: none; border-color: #FFD700; }
+    </style>
+<base target="_blank">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Offline Indicator -->
+        <div class="offline-indicator" id="offlineIndicator">
+            <i class="fas fa-wifi-slash mr-2"></i>You are offline
+        </div>
+
+        <!-- Loading Screen -->
+        <div class="loading-screen" id="loadingScreen">
+            <div class="w-24 h-24 rounded-3xl gold-gradient flex items-center justify-center mb-6 shadow-2xl">
+                <i class="fas fa-hand-pointer text-black text-4xl"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-white mb-2">Click One Solution</h1>
+            <p class="text-gray-400" id="loadingText">Initializing...</p>
+            <div class="spinner mt-6"></div>
+        </div>
+
+        <!-- Toast -->
+        <div class="toast" id="toast"></div>
+
+        <!-- Auth Screen -->
+        <div class="screen active" id="authScreen">
+            <div class="min-h-screen flex flex-col justify-center px-6 py-12 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                    <div class="absolute top-10 left-10 w-32 h-32 bg-yellow-500 rounded-full opacity-10 blur-3xl"></div>
+                    <div class="absolute bottom-20 right-10 w-48 h-48 bg-blue-500 rounded-full opacity-10 blur-3xl"></div>
+                </div>
+                
+                <div class="text-center mb-10 relative z-10">
+                    <div class="w-28 h-28 mx-auto mb-6 rounded-3xl gold-gradient flex items-center justify-center shadow-2xl">
+                        <i class="fas fa-hand-pointer text-black text-5xl"></i>
+                    </div>
+                    <h1 class="text-4xl font-black text-white mb-2 tracking-tight">
+                        Click<span class="gold-text">One</span>
+                    </h1>
+                    <p class="text-gray-400 font-bold text-lg tracking-widest uppercase">Solution</p>
+                    <p class="text-gray-500 mt-3 text-sm">Your Hyperlocal Service Marketplace</p>
+                </div>
+                
+                <div class="relative z-10 space-y-6">
+                    <!-- Role Selection -->
+                    <div class="flex bg-white/5 rounded-2xl p-1.5 border border-white/10">
+                        <button class="flex-1 py-3.5 rounded-xl text-sm font-bold transition-all bg-gradient-to-r from-yellow-400 to-orange-500 text-black shadow-lg" id="btnUser" onclick="setRole('user')">
+                            <i class="fas fa-user mr-2"></i>USER
+                        </button>
+                        <button class="flex-1 py-3.5 rounded-xl text-sm font-bold transition-all text-gray-400 hover:text-white" id="btnProvider" onclick="setRole('provider')">
+                            <i class="fas fa-briefcase mr-2"></i>PROVIDER
+                        </button>
+                        <button class="flex-1 py-3.5 rounded-xl text-sm font-bold transition-all text-gray-400 hover:text-white" id="btnAdmin" onclick="setRole('admin')">
+                            <i class="fas fa-shield-alt mr-2"></i>ADMIN
+                        </button>
+                    </div>
+                    
                     <!-- Auth Form -->
                     <div id="authForm" class="space-y-5">
                         <div class="relative">
